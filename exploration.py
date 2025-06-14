@@ -11,8 +11,17 @@ pd.set_option('display.max_colwidth', None)
 icu_stays = pd.read_csv("./processed/icu_stays.csv")
 
 def check_duplicates(data):
-    duplicate_count = data.duplicated().sum()
+    """
+    Given a dataset check for any duplicate rows. If they exist a count will be printed and the identified rows returned
+    :param data: Data to check
+    :return: Duplicated rows
+    """
+    duplicates = data.duplicated()
+    duplicate_count = duplicates.sum()
+
     print("{} duplicates\n".format(duplicate_count))
+
+    return duplicates
 
 
 def check_missing_data(data):

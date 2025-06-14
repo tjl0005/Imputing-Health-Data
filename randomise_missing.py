@@ -5,10 +5,11 @@ import pandas as pd
 import numpy as np
 
 np.random.seed(5072001)
-icu_stays = pd.read_csv("./processed/icu_stays.csv")
+
 # Columns to remove data from
 MISSING_COLS = ["los", "anchor_age"]
 
+icu_stays = pd.read_csv("./data/icu_stays.csv")
 
 def remove_given_indices(data, selected_indices, missing_percentage, n_cols):
     """
@@ -147,13 +148,13 @@ def missing_at_random_extremes(data, missing_percentage, columns, p):
 
 # Generating data with missing completely at random at 20%
 mcar = missing_completely_at_random(icu_stays, 0.2, MISSING_COLS)
-mcar.to_csv("./processed/icu_mcar.csv")
+mcar.to_csv("./data/missing/icu_mcar.csv", index=False, header=True)
 
 # Generating data with data missing near central values at 20%
 mnar_central = missing_at_random_central(icu_stays, 0.2, MISSING_COLS, 1)
-mnar_central.to_csv("./processed/icu_mnar_central.csv")
+mnar_central.to_csv("./data/missing/icu_mnar_central.csv", index=False, header=True)
 
 # Generating data with data missing near higher extremes at 20%
 mnar_lower, mnar_upper = missing_at_random_extremes(icu_stays, 0.2, MISSING_COLS, 0.5)
-mnar_lower.to_csv("./processed/icu_mnar_lower.csv")
-mnar_upper.to_csv("./processed/icu_mnar_upper.csv")
+mnar_lower.to_csv("./data/missing/icu_mnar_lower.csv", index=False, header=True)
+mnar_upper.to_csv("./data/missing/icu_mnar_upper.csv", index=False, header=True)
