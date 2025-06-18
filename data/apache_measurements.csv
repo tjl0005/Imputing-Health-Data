@@ -1,0 +1,15 @@
+Score Area,Category,measurement,itemid,Notes,,,,,,,icd_code,diagnosis
+1,Vital signs,temperature,223762,,,,,,,,N17,Acute Kidney Failure
+2,Vital signs,mean arterial pressure,220052,,,,,,,,,
+3,Vital signs,heart rate,220045,,,,,,,,,
+4,Respiratory,respiratory rate,220210,,,,,,,,,
+5,Respiratory,FiO2,223835,Use PAO2 < 0.5 >= Use A-aDO2 (Derived),,,,,,,,
+5,Respiratory,PCO2 (Arterial),220235,,,,,,,,,
+5,Labs,PO2 (Arterial),220224,,,,,,,,,
+6,Labs,arterial pH,223830,,,,,,,,,
+7,Labs,sodium,220645,,,,,,,,,
+8,Labs,postassium,227442,,,,,,,,,
+9,Labs,creatinine,220615,Double points if acute renal failure - not available,,,,,,,,
+10,Labs,hematocrit,220228,,,,,,,,,
+11,Labs,white blood cell,220546,,,,,,,,,
+12,Labs,glasgow coma score,226755,Using pre-calculated as cannot impute,,,,,,,,

@@ -7,9 +7,6 @@ import pandas as pd
 pd.set_option("display.max_columns", None)
 pd.set_option('display.max_colwidth', None)
 
-# Reading data
-icu_stays = pd.read_csv("./processed/icu_stays.csv")
-
 def check_duplicates(data):
     """
     Given a dataset check for any duplicate rows. If they exist a count will be printed and the identified rows returned
@@ -33,7 +30,10 @@ def check_missing_data(data):
     missing_df = data.isnull().sum()
     missing_df = missing_df[missing_df > 0]
 
-    print("Missing data for\n{}\n".format(missing_df))
+    if missing_df.empty:
+        print("No missing data")
+    else:
+        print("Missing data for\n{}\n".format(missing_df))
 
 
 def death_statistics(data):
@@ -41,8 +41,8 @@ def death_statistics(data):
     Display the number of patients who died and survived in ICU as well as percentage.
     :param data:
     """
-    death_count = (data["discharge_location"] == "DIED").sum()
-    alive_count = (data["discharge_location"] != "DIED").sum()
+    death_count = (data["outcome"] == "DIED").sum()
+    alive_count = (data["outcome"] != "DIED").sum()
 
     rate = (death_count / alive_count) * 100
 
@@ -59,10 +59,11 @@ def categorical_statistics(data):
 
     return {col: data[col].value_counts() for col in cat_cols}
 
-# Statistics for numerical data
-# print(icu_stays.describe())
-# print(categorical_statistics(icu_stays))
 
-check_duplicates(icu_stays)
-death_statistics(icu_stays)
-check_missing_data(icu_stays)
+def statistics(data):
+    print(data.describe())
+    print(categorical_statistics(data))
+
+    check_duplicates(data)
+    death_statistics(data)
+    check_missing_data(data)

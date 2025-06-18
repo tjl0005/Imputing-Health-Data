@@ -2,3 +2,14 @@
 /icu/
 /hosp/
 /mimic-iv-3.1.zip
+/data/hosp/
+/data/icu/
+/data/icu/chartevents.csv
+/data/icu/d_items.csv
+/data/icu/icustays.csv
+/data/imputed/
+/data/misc/
+/data/missing/
+/data/readings/
+/data/scores/
+/data/icu_stays.csv

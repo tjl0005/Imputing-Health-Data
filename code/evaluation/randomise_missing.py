@@ -1,15 +1,17 @@
 """
-Given the pre-processed data, create artificially missing data matching
+Given a complete dataset, create artificially missing data either MCAR or MNAR. Descriptions of
+how are in the docstrings for each function. The output is intended to be used in evaluating 
+imputation through ground truth.
+NOTE: Not implemented in main.py currently.
 """
-import pandas as pd
 import numpy as np
+import pandas as pd
+from code.constants import CATEGORIES
 
-np.random.seed(5072001)
+np.random.seed(507)
+# Measurements with no data missing - acts as a ground truth
+complete_measurements = pd.read_csv("../../data/missing/measurements_0.csv")
 
-# Columns to remove data from
-MISSING_COLS = ["los", "anchor_age"]
-
-icu_stays = pd.read_csv("./data/icu_stays.csv")
 
 def remove_given_indices(data, selected_indices, missing_percentage, n_cols):
     """
@@ -134,7 +136,7 @@ def missing_at_random_extremes(data, missing_percentage, columns, p):
             elif val <= upper_bound:
                 upper_extremes.append((row, col))
 
-        print("{} Bounds: {} and {}".format(col, lower_bound, upper_bound))
+        print("{} Bounds: {:.2f} and {:.2f}".format(col, lower_bound, upper_bound))
 
     # Removing data from lower and upper bounds
     lower_bound_n_removed, lower_bound_missing = remove_given_indices(data, lower_extremes, not_random_missing_rate, n_cols)
@@ -147,14 +149,14 @@ def missing_at_random_extremes(data, missing_percentage, columns, p):
 
 
 # Generating data with missing completely at random at 20%
-mcar = missing_completely_at_random(icu_stays, 0.2, MISSING_COLS)
-mcar.to_csv("./data/missing/icu_mcar.csv", index=False, header=True)
+mcar = missing_completely_at_random(complete_measurements, 0.2, CATEGORIES)
+mcar.to_csv("../../data/missing/measurements_0_mcar.csv", index=False, header=True)
 
 # Generating data with data missing near central values at 20%
-mnar_central = missing_at_random_central(icu_stays, 0.2, MISSING_COLS, 1)
-mnar_central.to_csv("./data/missing/icu_mnar_central.csv", index=False, header=True)
+mnar_central = missing_at_random_central(complete_measurements, 0.2, CATEGORIES, 1)
+mnar_central.to_csv("../../data/missing/measurements_0_mnar_central.csv", index=False, header=True)
 
 # Generating data with data missing near higher extremes at 20%
-mnar_lower, mnar_upper = missing_at_random_extremes(icu_stays, 0.2, MISSING_COLS, 0.5)
-mnar_lower.to_csv("./data/missing/icu_mnar_lower.csv", index=False, header=True)
-mnar_upper.to_csv("./data/missing/icu_mnar_upper.csv", index=False, header=True)
+mnar_lower, mnar_upper = missing_at_random_extremes(complete_measurements, 0.2, CATEGORIES, 0.5)
+mnar_lower.to_csv("../../data/missing/measurements_0_mnar_lower.csv", index=False, header=True)
+mnar_upper.to_csv("../../data/missing/measurements_0_mnar_upper.csv", index=False, header=True)
