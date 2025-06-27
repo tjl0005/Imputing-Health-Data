@@ -17,19 +17,20 @@ def limit_to_appropriate_patients(data):
     data = data[data["anchor_age"] > 18]
 
     # Only keeping first ICU stays for each subject
-    data = data.sort_values(by=['subject_id', 'admittime']).drop_duplicates(subset="subject_id", keep="first")
+    data = data.sort_values(by=["subject_id", "admittime"]).drop_duplicates(subset="subject_id", keep="first")
 
     # Limiting to stays between 12hrs and 10 days
-    data = data[(data['los'] >= 0.5) & (data['los'] <= 10)]
+    data = data[(data["los"] >= 0.5) & (data["los"] <= 10)]
 
     # Adding prediction value column, limiting to survival only
-    data['outcome'] = data['discharge_location'].where(data['discharge_location'] == 'DIED', "SURVIVED")
+    data["outcome"] = data["discharge_location"].where(data["discharge_location"] == "DIED", "SURVIVED")
 
     # Data should always be the same so safe to drop irrelevant columns here
-    data = data.drop(["intime", "outtime", "dischtime", "discharge_location", "deathtime", "admit_provider_id", "edregtime",
-                      "edouttime", "hospital_expire_flag", "anchor_year", "anchor_year_group", "dod", "language",
-                      "marital_status", "race", "insurance", "discharge_location", "subject_idhosp", "last_careunit",
-                      "hadm_id"], axis=1)
+    data = data.drop(
+        ["intime", "outtime", "dischtime", "discharge_location", "deathtime", "admit_provider_id", "edregtime",
+         "edouttime", "hospital_expire_flag", "anchor_year", "anchor_year_group", "dod", "language",
+         "marital_status", "race", "insurance", "discharge_location", "subject_idhosp", "last_careunit",
+         "hadm_id"], axis=1)
 
     return data
 

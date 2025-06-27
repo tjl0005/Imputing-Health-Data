@@ -6,40 +6,51 @@ NOTE: Not implemented in main.py currently.
 """
 import numpy as np
 import pandas as pd
-from code.constants import CATEGORIES
+from code.constants import MEASUREMENTS
 
-np.random.seed(507)
+np.random.seed(50701)
 # Measurements with no data missing - acts as a ground truth
-complete_measurements = pd.read_csv("../../data/missing/measurements_0.csv")
+complete_measurements = pd.read_csv("../../data/missing/resampled/measurements_0_downsample.csv")
 
 
-def remove_given_indices(data, selected_indices, missing_percentage, n_cols):
+def remove_given_indices(data, selected_indices, missing_percentage, n_cols, n_missing_per_row):
     """
-    Given a dataset remove specified indexes.
+    Given a dataset, remove specified indices, ensuring no more than `n_missing_per_row` missing values per row.
     :param data: Original data with complete values
-    :param selected_indices: A list in the form of (col, row_index) to be removed
-    :param missing_percentage: A float i.e. 0.2 representing the percentage of data to be removed
+    :param selected_indices: A list in the form of (row_index, col) to be removed
+    :param missing_percentage: A float representing the percentage of data to be removed (e.g., 0.2 for 20%)
     :param n_cols: Number of columns to remove values from
+    :param n_missing_per_row: Maximum number of missing values allowed per row
     :return: Modified dataset with artificially missing values
     """
     n_rows = data.shape[0]
     total_values = n_rows * n_cols
+    # How many values can be missing given percentage
     n_missing = int(total_values * missing_percentage)
 
-    # Desired number to remove may not exist so using minimum
-    n_to_remove = min(len(selected_indices), n_missing)
+    # Tracking how many values are missing per row, not currently used but can be used to limit rows to having x values
+    # row_missing_count = {row: data.iloc[row].isna().sum() for row in range(n_rows)}
 
-    # Randomly selecting from subset of data and removing data
-    missing_indices = np.random.choice(len(selected_indices), size=n_to_remove, replace=False)
-    selected_pairs = [selected_indices[i] for i in missing_indices]
+    missing_pairs = []
+    missing_data = data.copy()
 
-    for row, col in selected_pairs:
-        data.at[row, col] = np.nan
+    # Randomising order of deletion
+    np.random.shuffle(selected_indices)
 
-    return n_to_remove, data
+    # Removing specified number of rows and tracking how many are being deleted
+    for row, col in selected_indices:
+        if len(missing_pairs) < n_missing:
+            missing_pairs.append((row, col))
+            # row_missing_count[row] += 1
+
+    # Remove values from dataset
+    for row, col in missing_pairs:
+        missing_data.at[row, col] = np.nan
+
+    return len(missing_pairs), missing_data
 
 
-def missing_completely_at_random(data, missing_percentage, columns):
+def missing_completely_at_random(data, missing_percentage, columns, n_missing_per_row=5):
     """
     Given a dataset randomly remove values from specified columns.
     :param data: Dataframe containing specified columns
@@ -53,13 +64,13 @@ def missing_completely_at_random(data, missing_percentage, columns):
     column_pairs = [(row, col) for row in data.index for col in columns]
 
     # Remove any data from the identified values
-    n_removed, data_removed = remove_given_indices(data, column_pairs, missing_percentage, n_cols)
+    n_removed, data_removed = remove_given_indices(data, column_pairs, missing_percentage, n_cols, n_missing_per_row)
     print("{} randomly removed".format(n_removed))
 
     return data_removed
 
 
-def missing_at_random_central(data, missing_percentage, columns, no_std):
+def missing_at_random_central(data, missing_percentage, columns, no_std, n_missing_per_row=5):
     """
     Given a dataset remove the given percentage of values within the desired standard deviations of the mean.
     :param data: Dataframe containing specified columns
@@ -89,13 +100,13 @@ def missing_at_random_central(data, missing_percentage, columns, no_std):
                 central_values.append((row, col))
 
     # Remove desired percentage from subset of central datapoints
-    n_removed, incomplete_data = remove_given_indices(data, central_values, missing_percentage, n_cols)
+    n_removed, incomplete_data = remove_given_indices(data, central_values, missing_percentage, n_cols, n_missing_per_row)
     print("{} removed near center".format(n_removed))
 
     return incomplete_data
 
 
-def missing_at_random_extremes(data, missing_percentage, columns, p):
+def missing_at_random_extremes(data, missing_percentage, columns, p, n_missing_per_row=5):
     """
     Given a dataset remove values randomly and within the extremes of the column values. The split is decided by "p", a
     higher value will mean completely random whereas a lower one means more will be removed near the mean.
@@ -111,10 +122,8 @@ def missing_at_random_extremes(data, missing_percentage, columns, p):
     random_missing_rate = missing_percentage * p
     not_random_missing_rate = missing_percentage - random_missing_rate
 
-    print("\nRemoving {:.2f}% at random followed by {:.2f}% at extremes".format(random_missing_rate * 100, not_random_missing_rate * 100))
-
-    # Remove given percent of values at random
-    data = missing_completely_at_random(data, p, columns)
+    print("\nRemoving {:.2f}% at random followed by {:.2f}% at extremes".format(random_missing_rate * 100,
+                                                                                not_random_missing_rate * 100))
 
     # Values that are within specified standard deviations and can be randomly removed
     lower_extremes, upper_extremes = [], []
@@ -136,27 +145,37 @@ def missing_at_random_extremes(data, missing_percentage, columns, p):
             elif val <= upper_bound:
                 upper_extremes.append((row, col))
 
-        print("{} Bounds: {:.2f} and {:.2f}".format(col, lower_bound, upper_bound))
+        # print("{} Bounds: {:.2f} and {:.2f}".format(col, lower_bound, upper_bound))
 
     # Removing data from lower and upper bounds
-    lower_bound_n_removed, lower_bound_missing = remove_given_indices(data, lower_extremes, not_random_missing_rate, n_cols)
-    upper_bound_n_removed, upper_bound_missing = remove_given_indices(data, upper_extremes, not_random_missing_rate, n_cols)
+    lower_bound_n_removed, lower_bound_missing = remove_given_indices(data, lower_extremes, not_random_missing_rate,
+                                                                      n_cols, n_missing_per_row)
+    upper_bound_n_removed, upper_bound_missing = remove_given_indices(data, upper_extremes, not_random_missing_rate,
+                                                                      n_cols, n_missing_per_row)
 
     print("{} removed at lower bound".format(lower_bound_n_removed))
     print("{} removed at upper bound".format(upper_bound_n_removed))
 
+    # Remove given percent of values at random
+    lower_bound_missing = missing_completely_at_random(lower_bound_missing, p, columns, n_missing_per_row)
+    upper_bound_missing = missing_completely_at_random(upper_bound_missing, p, columns, n_missing_per_row)
+
     return lower_bound_missing, upper_bound_missing
 
 
-# Generating data with missing completely at random at 20%
-mcar = missing_completely_at_random(complete_measurements, 0.2, CATEGORIES)
-mcar.to_csv("../../data/missing/measurements_0_mcar.csv", index=False, header=True)
+def generate_missing_data(missing_percentage):
+    mcar = missing_completely_at_random(complete_measurements, missing_percentage, MEASUREMENTS)
+    mcar.to_csv("../../data/missing/artificial/measurements_{}_mcar.csv".format(missing_percentage), index=False, header=True)
 
-# Generating data with data missing near central values at 20%
-mnar_central = missing_at_random_central(complete_measurements, 0.2, CATEGORIES, 1)
-mnar_central.to_csv("../../data/missing/measurements_0_mnar_central.csv", index=False, header=True)
+    mnar_central = missing_at_random_central(complete_measurements, missing_percentage, MEASUREMENTS, 1)
+    mnar_central.to_csv("../../data/missing/artificial/measurements_{}_mnar_central.csv".format(missing_percentage), index=False, header=True)
 
-# Generating data with data missing near higher extremes at 20%
-mnar_lower, mnar_upper = missing_at_random_extremes(complete_measurements, 0.2, CATEGORIES, 0.5)
-mnar_lower.to_csv("../../data/missing/measurements_0_mnar_lower.csv", index=False, header=True)
-mnar_upper.to_csv("../../data/missing/measurements_0_mnar_upper.csv", index=False, header=True)
+    mnar_lower, mnar_upper = missing_at_random_extremes(complete_measurements, missing_percentage, MEASUREMENTS, 0.5)
+    mnar_lower.to_csv("../../data/missing/artificial/measurements_{}_mnar_lower.csv".format(missing_percentage), index=False, header=True)
+    mnar_upper.to_csv("../../data/missing/artificial/measurements_{}_mnar_upper.csv".format(missing_percentage), index=False, header=True)
+
+
+# Producing datasets with different percentages of missingness
+generate_missing_data(0.2)
+generate_missing_data(0.5)
+generate_missing_data(0.7)

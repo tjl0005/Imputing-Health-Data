@@ -37,11 +37,7 @@ def calculate_single_scores(category, reading, pa_co2=None, pa_o2=None):
     :param pa_co2: Default is none, required for FiO2 score - refers to
     :return: Score based on the reading and category
     """
-    # Equivalent to a missing reading
-    if reading > 0 and reading > 999999:
-        return np.nan
-    # Defining ranges and scores for the categories
-    elif category == "temperature":
+    if category == "temperature":
         # Each sub-list is made up of the bounds per score, from highest lowest
         ranges = ([41, 50, 4], [39, 40.9, 3], [38.5, 38.9, 1], [36, 38.9, 0], [34, 35.9, 1], [32, 33.9, 2],
                   [30, 31.9, 3], [19, 29.9, 4])
@@ -119,7 +115,17 @@ def save_score_data(data, file_name):
     :param data: Dataset containing the relevant APACHE II measurements
     :param file_name: The filename to save the score data under
     """
+    # Specify save directory depending on imputation type
+    if "mean" in file_name:
+        sub_dir = "mean"
+    elif "knn" in file_name:
+        sub_dir = "knn"
+    elif "mice" in file_name:
+        sub_dir = "mice"
+    else:
+        sub_dir = ""
+
     # Scoring the data and removing irrelevant columns
     data_with_scores = data.apply(apply_scores, axis=1).drop(["PCO2 (Arterial)", "PO2 (Arterial)"], axis=1)
-    data_with_scores.to_csv("../data/scores/{}.csv".format(file_name, index=False))
+    data_with_scores.to_csv("../data/scores/{}/{}.csv".format(sub_dir, file_name), index=False)
 

@@ -1,14 +1,17 @@
 """
 Re-sample the mortality outcomes using under and over sampling to improve class balance.
-NOTE: Functional but not currently implemented anywhere currently.
+Required as negative mortality is so low in the ground truth data
+
+NOTE: When expanding to using non-ground truth data need to account for missingness and why
 """
-import pandas as pd
+import os
 from collections import Counter
-from imblearn.under_sampling import RandomUnderSampler
+import pandas as pd
 from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
+from code.constants import RESAMPLED_DIR, GROUND_TRUTH_FILE, RAW_MISSING_DATA_DIR
 
-apache_scores = pd.read_csv("../../data/scores/final_apache_scores.csv")
-
+ground_truth_data = pd.read_csv(os.path.join(RAW_MISSING_DATA_DIR, GROUND_TRUTH_FILE))
 
 def downsample(X, y):
     """
@@ -20,9 +23,10 @@ def downsample(X, y):
     # Using random downsampling to balance mortality outcomes
     rus = RandomUnderSampler(sampling_strategy="majority")
     X_resampled_down, y_resampled_down = rus.fit_resample(X, y)
-    print("Undersampling: {}".format(Counter(y_resampled_down)))
+    print("Downsampling: {}".format(Counter(y_resampled_down)))
 
     return X_resampled_down, y_resampled_down
+
 
 def oversample(X, y):
     """
@@ -38,13 +42,14 @@ def oversample(X, y):
 
     return X_resampled_up, y_resampled_up
 
-def sample_and_save(data, target, sample_type):
+
+def sample_and_save(data, reference, target="outcome", sample_type="downsample"):
     """
     Given a dataset and a target variable, sample and save the sampled dataset and target variable.
     :param data: Data containing the features and target variable
+    :param reference: Reference to save the file with for identification i.e. missing_2
     :param target: The name of the variable to targeted
     :param sample_type: "downsample" or "oversample
-    :return: Data with the specified sampling method applied
     """
     # Splitting into features and prediction value
     X = data.drop(target, axis=1)
@@ -56,15 +61,16 @@ def sample_and_save(data, target, sample_type):
         x_sampled, y_sampled = oversample(X, y)
     else:
         print("error")
-        return None
+        return
 
     sampled_data = pd.DataFrame(x_sampled, columns=X.columns)
     sampled_data["outcome"] = y_sampled
 
-    return sampled_data
+    sampled_data = sampled_data.sample(frac=1, random_state=507).reset_index(drop=True)
 
-down_sampled_scores = sample_and_save(apache_scores, "outcome", "downsample")
-over_sampled_scores = sample_and_save(apache_scores, "outcome", "oversample")
+    save_dir = "{}/{}_{}.csv".format(RESAMPLED_DIR, reference, sample_type)
+    sampled_data.to_csv(save_dir, index=False)
 
-down_sampled_scores.to_csv("../../data/scores/apache_downsampled.csv")
-over_sampled_scores.to_csv("../../data/scores/apache_oversampled.csv")
+
+# Example to downsample ground truth data
+sample_and_save(ground_truth_data, "measurements_0")

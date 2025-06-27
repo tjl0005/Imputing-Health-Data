@@ -4,7 +4,7 @@ levels of missingness ranging from 0 values per row to up to 5 values per row.
 """
 import numpy as np
 import pandas as pd
-from code.constants import WORST_READINGS_FILE, CATEGORIES, NON_SCORED_COLUMNS
+from code.constants import WORST_READINGS_FILE, CATEGORIES, NON_SCORED_COLUMNS, MEASUREMENTS, READINGS_OUTPUT
 
 
 def pivot_readings():
@@ -40,12 +40,13 @@ def check_missing_scores(data):
     print(missing_values)
 
 
-def final_cleaning(reading_data, missing_limit=0):
+def final_cleaning(reading_data, feature_ranges=True, missing_limit=0):
     """
     Removes the temperature column as there is too much missing data to be meaningful. Also provides the option to
     remove rows where they are missing to many values. By default, all rows with missing data are removed.
     :param reading_data: Scored apache dataset
     :param missing_limit: A number representing the number of variables per row that can be missing
+    :param feature_ranges: Boolean to specify whether to produce another csv file recording the value ranges
     :return: The cleaned dataset with missing data removed
     """
     initial_rows = reading_data.shape[0]
@@ -53,8 +54,14 @@ def final_cleaning(reading_data, missing_limit=0):
     # Dropping temperature as it is missing to many values
     reading_data = reading_data.drop(columns=["temperature", "glasgow coma score"])
 
-    # Convert measurements to numeric and filter to be in range
-    reading_data[CATEGORIES] = reading_data[CATEGORIES].apply(lambda col: pd.to_numeric(col, errors='coerce').where((col >= 0) & (col <= 9999), np.nan))
+    # Convert measurements to numeric and filter to be in a realistic range as may be misreadings and placeholder values
+    reading_data[CATEGORIES] = reading_data[CATEGORIES].apply(
+        lambda col: pd.to_numeric(col, errors="coerce").where((col > 0) & (col < 1000), np.nan))
+
+    if feature_ranges:
+        feature_stats = reading_data[MEASUREMENTS].agg(["min", "max", "mean"])
+
+        feature_stats.to_csv("{}/worst_24_hours_stats.csv".format(READINGS_OUTPUT))
 
     # Limiting to rows with more than the specified number of values missing
     missing_per_row = reading_data.isna().sum(axis=1)

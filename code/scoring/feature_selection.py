@@ -1,19 +1,20 @@
 """
 Used to process the icustays and chartevents to get the features required for prediction and imputation.
 """
-from code.constants import CHUNK_SIZE, APACHE_FEATURES_FILE, ICU_STAYS_OUTPUT, ID_COLS, FEATURE_COLUMNS, \
-    READINGS_OUTPUT, CHART_EVENTS_INPUT, CATEGORIES
-import pandas as pd
 import os
+import pandas as pd
+from code.constants import CHUNK_SIZE, APACHE_FEATURES_FILE, ICU_STAYS_OUTPUT, ID_COLS, FEATURE_COLUMNS, \
+    READINGS_OUTPUT, CHART_EVENTS_INPUT, CATEGORIES, MEASUREMENTS
 
-def first_readings(data):
+
+def find_first_readings(data):
     """
     Returns all the patients with their first readings of the defined features
     :param data:
     :return:
     """
     # Sort subject readings by time and only keep the first of each measurement
-    data = data.sort_values(by=["subject_id", "charttime"]).drop_duplicates(subset=["subject_id", "measurement"], keep="first")
+    data = data.sort_values(by=["subject_id", "charttime"]).drop_duplicates(subset=["subject_id", "measurement"],                                                                 keep="first")
     return data
 
 
@@ -83,24 +84,28 @@ def process_in_chunks(interval=24):
         print("Removed old worst readings file")
 
     # Need to process chart events in chunks due to memory usage
-    for chunk in pd.read_csv(CHART_EVENTS_INPUT, usecols=ID_COLS+FEATURE_COLUMNS, chunksize=CHUNK_SIZE):
+    for chunk in pd.read_csv(CHART_EVENTS_INPUT, usecols=ID_COLS + FEATURE_COLUMNS, chunksize=CHUNK_SIZE):
         chunk_num += 1
         print("Chunk {} with {} lines read in total".format(chunk_num, (chunk_num * CHUNK_SIZE)))
 
         # Limiting chart events to desired measurements
         relevant_chart_events = chunk[chunk["itemid"].isin(features["itemid"])]
-        relevant_chart_events = relevant_chart_events.merge(features[["itemid", "measurement"]], on="itemid", how="left")
+        relevant_chart_events = relevant_chart_events.merge(features[["itemid", "measurement"]], on="itemid",
+                                                            how="left")
         relevant_chart_events = relevant_chart_events.drop(columns=["itemid"])
 
         # Combine with ICU stays and drop excess data
-        combined_chunk = pd.merge(icu_stays, relevant_chart_events, on=["subject_id", "stay_id"]).drop(["stay_id"], axis=1)
+        combined_chunk = pd.merge(icu_stays, relevant_chart_events, on=["subject_id", "stay_id"]).drop(["stay_id"],
+                                                                                                       axis=1)
 
         # Get first readings and the worst readings for the current chunk
-        processed_first_readings = first_readings(combined_chunk)
-        processed_worst_readings = find_worst_readings(combined_chunk, interval).drop_duplicates(subset=["subject_id", "measurement"], keep="first")
+        processed_first_readings = find_first_readings(combined_chunk)
+        processed_worst_readings = find_worst_readings(combined_chunk, interval).drop_duplicates(
+            subset=["subject_id", "measurement"], keep="first")
 
         # Appending chunk data to output files
         processed_first_readings.to_csv(first_readings_dir, mode="a", header=first_chunk, index=False)
         processed_worst_readings.to_csv(worst_readings_dir, mode="a", header=first_chunk, index=False)
 
         first_chunk = False
+

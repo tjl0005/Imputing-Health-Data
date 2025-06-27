@@ -1,28 +1,26 @@
 """
 Implementation of XGBoost using the apache scores. Intended to be way of testing different imputation methods and
 sampling techniques.
-NOTE: Not yet fully implemented and will be done after finalising imputation of ground truth tests.
 """
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score, roc_auc_score, roc_curve
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
+from code.constants import CATEGORICAL_FEATURES, COMPLETE_FEATURES, GRID_SEARCH_OUTPUT, PREDICTION_GS_RECORD, \
+    GRID_SEARCH_RESULT_COLUMNS, XGBOOST_PARAMS
 
-# Need to see how literature optimises and how to properly implement a grid search
-
-apache_scores = pd.read_csv("../../data/scores/complete_scores.csv")
-apache_scores_limit_2 = pd.read_csv("../../data/scores/scores_limit_2.csv")
-apache_scores_limit_3 = pd.read_csv("../../data/scores/scores_limit_3.csv")
-apache_scores_limit_5 = pd.read_csv("../../data/scores/scores_limit_5.csv")
-
-non_features = ["subject_id", "los", "outcome", "total_score"]
-features = apache_scores.columns.difference(non_features).tolist()
-categorical_columns = ["admission_location", "admission_type", "admittime", "first_careunit", "gender"]
-
+# Used to convert outcome into binary
 le = LabelEncoder()
+
+# Currently using downsampled ground-truth data
+# apache_scores = pd.read_csv("../../data/scores/measurements_0_downsample.csv")
+apache_scores = pd.read_csv("../../data/missing/resampled/measurements_0_downsample.csv")
+
+apache_scores["outcome_encoded"] = le.fit_transform(apache_scores["outcome"])
 
 
 def data_setup(score_data):
@@ -33,56 +31,129 @@ def data_setup(score_data):
     :return: X_train, X_test, y_train, y_test
     """
     # Splitting into features and target variables
-    X = score_data[features]
-    y = score_data["outcome"]
+    X = score_data[COMPLETE_FEATURES].copy()
+    y = score_data["outcome_encoded"].copy()
 
     # Splitting into training and test data, stratifying due to limited data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=507, stratify=y)
 
-    y_train = le.fit_transform(y_train)
-
-    for col in categorical_columns:
+    for col in CATEGORICAL_FEATURES:
         X_train[col] = X_train[col].astype("category")
         X_test[col] = X_test[col].astype("category")
 
     return X_train, X_test, y_train, y_test
 
 
-def xgb_predictions(X_train, X_test, y_train, n_estimators):
-    """"
-    Uses defined training and test data to train an XGB model with the specified n_estimators and makes predictions
-    :return the trained XGB model and its predictions on the test data
+# TODO: Use this in the pipeline to maximise f-1
+def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_importance=False, roc=False, gamma=0.01, learning_rate=0.001,
+                       max_depth=3, n_estimators=100, n_splits=5):
     """
-    model = xgb.XGBClassifier(n_estimators=n_estimators, enable_categorical=True)
-
-    model.fit(X_train, y_train)
-
-    predictions = model.predict(X_test)
-
-    return model, predictions
-
-
-def evaluate_predictions(predictions, y_test):
+    Perform cross-validation for XGBClassifier outside of grid search.
+    :param score_data: Full dataset to perform cross-validation on
+    :param plot: Boolean - Decide whether to produce feature importance plot for the resulting model
+    :param output_stats: Boolean - Decide whether to print metrics of the model including F-1 and confusion matrix
+    :param model_name: Reference for the model when plotting or outputting results
+    :param gamma: Minimum loss reduction required to make a further partition on a leaf node of the tree
+    :param learning_rate: Step size of optimisation
+    :param max_depth: Depth of the tree
+    :param n_estimators: Number of trees
+    :param n_splits: Number of stratified folds
+    :return: Metrics for model performance, average of cross validation
     """
-    Produce metrics for the provided predictions.
-    :param predictions: The output predictions of a model
-    :param y_test: The test data containing the actual values
-    :return: The accuracy, precision, recall, F1 score and confusion matrix of the predictions
-    """
-    # Transform the predictions back to original labels
-    predictions = le.inverse_transform(predictions)
+    # Splititng the data and using encoded prediction variable
+    X = score_data[COMPLETE_FEATURES].copy()
+    y = score_data["outcome_encoded"].copy()
 
-    accuracy = accuracy_score(y_test, predictions)
-    precision = precision_score(y_test, predictions, pos_label="DIED")
-    recall = recall_score(y_test, predictions, pos_label="DIED")
+    # Ensuring categorical features are set up correctly
+    for col in CATEGORICAL_FEATURES:
+        X[col] = X[col].astype("category")
 
-    f1 = f1_score(y_test, predictions, pos_label="DIED")
+    # Using stratified folds to ensure an even distribution of mortalities
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=507)
 
-    # Confusion Matrix with percentages per category
+    # Track the metrics for each of the models
+    accuracies = []
+    precisions = []
+    recalls = []
+    f1s = []
+    aucs = []
+
+    # Cross validation across the found splits
+    for fold_no, (train_index, test_index) in enumerate(skf.split(X, y), 0):
+        fold_no += 1
+        print("Fold no:", fold_no)
+
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+
+        # Defining and training model with given values
+        model = xgb.XGBClassifier(gamma=gamma, learning_rate=learning_rate, max_depth=int(max_depth),
+                                  n_estimators=int(n_estimators), enable_categorical=True)
+        model.fit(X_train, y_train)
+
+        # Getting predictions on test data
+        predictions = model.predict(X_test)
+
+        # Tracking metrics when looking for negative mortality
+        accuracies.append(accuracy_score(y_test, predictions))
+        precisions.append(precision_score(y_test, predictions, pos_label=0))
+        recalls.append(recall_score(y_test, predictions, pos_label=0))
+        f1s.append(f1_score(y_test, predictions, pos_label=0))
+
+        # Finding AUC
+        prob_predictions = model.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, prob_predictions)
+        aucs.append(auc)
+
+    # Using feature importance of the last model
+    if feature_importance:
+        xgb_feature_importance(model, model_name)
+    if roc:
+        plot_roc(model, X_test, y_test, model_name)
+
+    # Averaging metrics to get better idea of performance
+    accuracy, precision, recall, f1, auc = (np.mean(accuracies)), np.mean(precisions), np.mean(recalls), np.mean(f1s), np.mean(aucs)
+
+    # Confusion matrix to see what the model is doing prediction wise
     cm = confusion_matrix(y_test, predictions)
     cm_percentage = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]
 
-    return accuracy, precision, recall, f1, cm_percentage
+    # Printing metrics of cross validation
+    if output_stats:
+        print("Stats for {}".format(model_name))
+        print("Accuracy: {:.2f}%".format((accuracy * 100)))
+        print("Precision: {:.2f}".format(precision))
+        print("Recall: {:.2f}".format(recall))
+        print("F1-Score: {:.2f}".format(f1))
+
+        # Labelling confusion matrix for readability
+        cm_df = pd.DataFrame(
+            cm_percentage,
+            index=["True Died", "True Survived"],
+            columns=["Predicted Died", "Predicted Survived"]
+        )
+        print(cm_df.map(lambda x: f"{x:.2%}"))
+
+    return accuracy, precision, recall, f1, auc, cm_percentage
+
+
+def plot_roc(model, X_test, y_test, model_name):
+    prob_predictions = model.predict_proba(X_test)[:, 1]  # Get probabilities for ROC
+
+    # Compute ROC curve
+    fpr, tpr, thresholds = roc_curve(y_test, prob_predictions)
+
+    # Plot ROC curve
+    plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (AUC = %0.2f)' % roc_auc_score(y_test, prob_predictions))
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate (Recall)')
+    plt.title(f'Receiver Operating Characteristic - {model_name}')
+    plt.legend(loc='lower right')
+    plt.savefig("../../visualisations/gs/{}_auc_roc.png".format(model_name))
 
 
 def xgb_feature_importance(model, model_name):
@@ -91,82 +162,131 @@ def xgb_feature_importance(model, model_name):
     :param model_name: Label used to title and save the plot
     :param model: The trained XGBoost model
     """
-    # Feature importance
     feature_importance = model.feature_importances_
 
     # Plotting feature importance
-    plt.barh(features, feature_importance)
+    plt.barh(COMPLETE_FEATURES, feature_importance)
     plt.xlabel("Feature Importance Score")
     plt.ylabel("Features")
     plt.title("Feature Importance for {}".format(model_name))
 
-    plt.savefig("{}.png".format(model_name))
+    plt.savefig("../../visualisations/gs/{}_feature_importance.png".format(model_name))
 
 
-def build_and_test_model(score_data, model_name=None, n_estimators=10, output_stats=True, plot=False):
+def grid_search_optimisation(score_data, search_reference="no missing data"):
     """
-    Function to train and test an XGBoost model with the specified n_estimators.
-    :param score_data: Dataset to train model on
-    :param model_name: String used to label the output statistics and chart
-    :param n_estimators:
-    :param output_stats: Boolean to decide whether to print model metrics and confusion matrix
-    :param plot: Boolean to decide whether to plot the feature importance of the model
-    :return:
+    Perform a grid search hyperparameter optimisation for XGBoost using the specified parameters in constants.py.
+    Models are evaluated using accuracy, recall and the F-1 score with cross validation.
+    :param score_data: The training data as a dataframe, this will be prepared through the defined function prior.
+    :param search_reference: Used to label saved results
     """
+    # Setting up model "template" for grid search
+    xgb_model = xgb.XGBClassifier(enable_categorical=True)
+    stratified_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=507)
     X_train, X_test, y_train, y_test = data_setup(score_data)
 
-    model, predictions = xgb_predictions(X_train, X_test, y_train, n_estimators)
+    # Defining and performing grid search with evaluation of F1
+    grid_search = GridSearchCV(estimator=xgb_model, param_grid=XGBOOST_PARAMS,
+                               scoring=["accuracy", "precision", "recall", "f1"], refit="f1", cv=stratified_cv,
+                               verbose=2)
+    grid_search.fit(X_train, y_train)
 
-    if plot:
-        xgb_feature_importance(model, model_name)
+    # Display the best parameters and results
+    print(grid_search.best_params_)
+    print(grid_search.best_score_)
 
-    accuracy, precision, recall, f1, cm = evaluate_predictions(predictions, y_test)
+    # Saving results of grid search in order of F1 score
+    df = pd.DataFrame(grid_search.cv_results_)
+    df = df[GRID_SEARCH_RESULT_COLUMNS]
+    df = df.sort_values("mean_test_f1", ascending=False)
 
-    if output_stats:
-        print("Stats for {}".format(model_name))
-        print("Accuracy: {:.2f}%".format((accuracy * 100)))
-        print("Precision: {:.2f}".format(precision))
-        print("Recall: {:.2f}".format(recall))
-        print("F1-Score: {:.2f}".format(f1))
-        print("Confusion Matrix:\n{}\n".format(cm))
+    save_dir = GRID_SEARCH_OUTPUT + search_reference + ".csv"
+    df.to_csv(save_dir, index=False)
 
-    return accuracy, precision, recall, f1
+    # Recording the best results of all grid searches with given reference
+    best_result = df.iloc[0].to_frame().T
+    best_result["test_name"] = search_reference
+
+    if not os.path.exists(PREDICTION_GS_RECORD):
+        best_result.to_csv(PREDICTION_GS_RECORD, index=False)
+    else:
+        best_result.to_csv(PREDICTION_GS_RECORD, mode="a", header=False, index=False)
 
 
-def grid_search(data, n_estimators_values, plot_results=True):
+def plot_grid_search_results(gs_results, reference):
     """
-    Given the relevant dataset containing both training and test data this will perform a grid search with the provided
-    hyperparameter values. It will return the value which produced the highest F1 score and produce a plot showing how
-    the score changed the hyperparameter values.
-    :param data: Dataset containing training and test data
-    :param n_estimators_values:
-    :param plot_results: Boolean, plot a line chart showing the scores per value
-    :return: The best value for producing a high F1 score
+    Used to plot the findings of the grid search. Each hyperparameter value is plotted for each of the metrics to see
+    influence.
+    :param gs_results: The previous grid search results as a dataframe.
+    :param reference: String to label the plot with
     """
-    search_results = {}
+    # Columns containing the parameter values used
+    param_columns = [col for col in gs_results.columns if col.startswith("param_")]
 
-    # For each value test it in a model and save the metrics
-    for n_estimators in n_estimators_values:
-        accuracy, precision, recall, f1 = build_and_test_model(data, n_estimators=n_estimators, output_stats=False)
-        search_results.update({n_estimators: f1})
+    # Grouping results for plotting
+    grouped_results = gs_results.groupby(param_columns).agg(
+        accuracy_mean=("mean_test_accuracy", "mean"),
+        accuracy_std=("std_test_accuracy", "mean"),
+        precision_mean=("mean_test_precision", "mean"),
+        precision_std=("std_test_precision", "mean"),
+        recall_mean=("mean_test_recall", "mean"),
+        recall_std=("std_test_recall", "mean"),
+        f1_mean=("mean_test_f1", "mean"),
+        f1_std=("std_test_f1", "mean")
+    ).reset_index()
 
-    if plot_results:
-        plt.plot(search_results.keys(), search_results.values())
-        plt.xlabel('n_estimators')
-        plt.ylabel('F-1 Score')
-        plt.title('Grid Search for n_estimators')
-        plt.show()
+    # Setting up plot with details
+    fig, ax = plt.subplots(1, len(param_columns), figsize=(20, 5))
+    fig.suptitle("Metrics from Grid Search")
+    fig.text(0, 0.5, "Score", va="center", rotation="vertical")
 
-    # Selecting the best value
-    best_result = max(search_results, key=search_results.get)
-    best_value = search_results[best_result]
+    # Plotting results for each of the hyperparameters
+    for i, p in enumerate(param_columns):
+        # Sorting so in order of the current parameter
+        sorted_group = grouped_results.sort_values(by=p)
 
-    print("Best value: {} with F1: {:.2f}".format(best_result, best_value))
+        # Plotting error bars for the metrics
+        ax[i].errorbar(sorted_group[p], sorted_group["accuracy_mean"], sorted_group["accuracy_std"], linestyle="--",
+                       label="Accuracy")
+        ax[i].errorbar(sorted_group[p], sorted_group["precision_mean"], sorted_group["precision_std"], linestyle="--",
+                       label="Precision")
+        ax[i].errorbar(sorted_group[p], sorted_group["recall_mean"], sorted_group["recall_std"], linestyle="-",
+                       label="Recall")
+        ax[i].errorbar(sorted_group[p], sorted_group["f1_mean"], sorted_group["f1_std"], linestyle="-.",
+                       label="F1 Score")
 
-    return best_value
+        ax[i].set_xlabel(p.split("param_")[1].upper())
+
+    plt.legend(loc="upper right")
+    plt.tight_layout()
+    plt.savefig("../../visualisations/gs/{}.png".format(reference))
+    plt.close()
 
 
-build_and_test_model(apache_scores, model_name="default_scores")
-# build_and_test_model(apache_scores_limit_2, model_name="2")
-# build_and_test_model(apache_scores_limit_3, model_name="3")
-# build_and_test_model(apache_scores_limit_5, model_name="3")
+def summarise_grid_search(score_data, search_reference="no missing data"):
+    """
+    Given the original dataset used in the grid search and the reference of the grid search (file name) plot the results
+    and train and evaluate the model using the best parameters and output full details including confusion matrix and
+    feature importance.
+    :param score_data: Original unsplit dataset used for training and evaluating the model in the grid search
+    :param search_reference: Name of the grid search (file name of results)
+    """
+    # Reading grid search results from file
+    results_dir = GRID_SEARCH_OUTPUT + search_reference + ".csv"
+    results = pd.read_csv(results_dir)
+
+    # Plotting the results for all the searches
+    plot_grid_search_results(results, search_reference)
+
+    best_result = results.iloc[0]
+
+    # Training best found model, outputting the stats with the confusion matrix and plotting feature importance
+    cross_validate_xgb(score_data, search_reference, gamma=best_result["param_gamma"],
+                       n_estimators=best_result["param_n_estimators"],
+                       max_depth=best_result["param_max_depth"],
+                       learning_rate=best_result["param_learning_rate"], output_stats=True, feature_importance=True, roc=True
+                       )
+
+
+grid_search_optimisation(apache_scores)
+summarise_grid_search(apache_scores)

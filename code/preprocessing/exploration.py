@@ -5,7 +5,7 @@ import pandas as pd
 
 
 pd.set_option("display.max_columns", None)
-pd.set_option('display.max_colwidth', None)
+pd.set_option("display.max_colwidth", None)
 
 def check_duplicates(data):
     """
@@ -55,7 +55,7 @@ def categorical_statistics(data):
     :param data: data containing categorical variables
     :return: dictionary containing number of value instances
     """
-    cat_cols = data.select_dtypes(include=['object', 'category']).columns
+    cat_cols = data.select_dtypes(include=["object", "category"]).columns
 
     return {col: data[col].value_counts() for col in cat_cols}
 
