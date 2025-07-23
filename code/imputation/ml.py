@@ -9,20 +9,20 @@ import miceforest as mf
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import SimpleImputer, KNNImputer, IterativeImputer
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from code.constants import MEASUREMENTS, IMPUTATION_OUTPUT
 
 scaler = MinMaxScaler()
 
-def mean_impute(data):
+def single_impute(data, strategy="mean"):
     """
     Impute specified columns using mean values. (Not an example of multiple imputation but used for comparison)
     :param data: The dataset containing missing values.
     :return: Data with any missing values imputed with variable mean.
     """
     # Missing means they are nan and will be imputed using the mean
-    mean_imputer = SimpleImputer(missing_values=np.nan, strategy="mean")
+    mean_imputer = SimpleImputer(missing_values=np.nan, strategy=strategy)
 
     # Imputing reading measurement columns only
     data[MEASUREMENTS] = mean_imputer.fit_transform(data[MEASUREMENTS])
@@ -65,10 +65,8 @@ def mice_impute(data, estimator_choice="linear", max_iter=100):
 
     if estimator_choice == "linear":
         estimator = LinearRegression()
-    elif estimator_choice == "rf":
-        estimator = RandomForestRegressor(n_estimators=100)
     else:
-        estimator = xgboost.XGBRegressor()
+        estimator = RandomForestRegressor(n_estimators=100)
 
     iterative_imputer = IterativeImputer(estimator=estimator, random_state=502, max_iter=max_iter)
     imputed_data = iterative_imputer.fit_transform(numerical_data)
@@ -80,7 +78,7 @@ def mice_impute(data, estimator_choice="linear", max_iter=100):
     return data
 
 
-def mice_forest_impute(data, num_datasets=2, max_iter=10, n_estimators=100):
+def mice_forest_impute(data, num_datasets=2, max_iter=10, n_estimators=100, type="artificial"):
     numerical_data = data[MEASUREMENTS]
 
     # Uses light-gbm and mean matching
@@ -121,8 +119,8 @@ def impute_and_save(data, imputation_type, file, k=5, estimator_choice="linear")
     else:
         print("Imputing {} through {}".format(file, imputation_type))
 
-    if imputation_type == "mean":
-        imputed_data = mean_impute(missing_data)
+    if imputation_type == "mean" or imputation_type == "median":
+        imputed_data = single_impute(missing_data, imputation_type)
     elif imputation_type == "knn":
         imputed_data = knn_impute(missing_data, k)
     elif imputation_type == "mice":
@@ -133,7 +131,7 @@ def impute_and_save(data, imputation_type, file, k=5, estimator_choice="linear")
         print("Imputation not recognised")
         return None
 
-    output_file = IMPUTATION_OUTPUT + "{}/{}_{}_imputed.csv".format(imputation_type, file, imputation_type)
+    output_file = IMPUTATION_OUTPUT + "{}/{}/{}_{}_imputed.csv".format(type, imputation_type, file, imputation_type)
     imputed_data.to_csv(output_file, index=False)
 
     return imputed_data

@@ -23,7 +23,6 @@ def downsample(X, y):
     # Using random downsampling to balance mortality outcomes
     rus = RandomUnderSampler(sampling_strategy="majority")
     X_resampled_down, y_resampled_down = rus.fit_resample(X, y)
-    print("Downsampling: {}".format(Counter(y_resampled_down)))
 
     return X_resampled_down, y_resampled_down
 
@@ -38,12 +37,11 @@ def oversample(X, y):
     # Using random over sampling
     ros = RandomOverSampler(sampling_strategy="minority")
     X_resampled_up, y_resampled_up = ros.fit_resample(X, y)
-    print("Oversampling: {}".format(Counter(y_resampled_up)))
 
     return X_resampled_up, y_resampled_up
 
 
-def sample_and_save(data, reference, target="outcome", sample_type="downsample"):
+def resample_data(data, reference, print_out=False, target="outcome", sample_type="downsample"):
     """
     Given a dataset and a target variable, sample and save the sampled dataset and target variable.
     :param data: Data containing the features and target variable
@@ -61,7 +59,10 @@ def sample_and_save(data, reference, target="outcome", sample_type="downsample")
         x_sampled, y_sampled = oversample(X, y)
     else:
         print("error")
-        return
+        return None
+
+    if print_out:
+        print("Resampling: {}".format(Counter(y_sampled)))
 
     sampled_data = pd.DataFrame(x_sampled, columns=X.columns)
     sampled_data["outcome"] = y_sampled
@@ -69,8 +70,10 @@ def sample_and_save(data, reference, target="outcome", sample_type="downsample")
     sampled_data = sampled_data.sample(frac=1, random_state=507).reset_index(drop=True)
 
     save_dir = "{}/{}_{}.csv".format(RESAMPLED_DIR, reference, sample_type)
-    sampled_data.to_csv(save_dir, index=False)
+
+    return sampled_data, save_dir
 
 
 # Example to downsample ground truth data
-sample_and_save(ground_truth_data, "measurements_0")
+resampled_data, save_dir = resample_data(ground_truth_data, "measurements_0")
+resampled_data.to_csv(save_dir)

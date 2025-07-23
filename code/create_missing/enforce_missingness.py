@@ -4,7 +4,7 @@ levels of missingness ranging from 0 values per row to up to 5 values per row.
 """
 import numpy as np
 import pandas as pd
-from code.constants import WORST_READINGS_FILE, CATEGORIES, NON_SCORED_COLUMNS, MEASUREMENTS, READINGS_OUTPUT
+from code.constants import WORST_READINGS_FILE, NON_SCORED_COLUMNS, MEASUREMENTS, READINGS_OUTPUT
 
 
 def pivot_readings():
@@ -51,11 +51,8 @@ def final_cleaning(reading_data, feature_ranges=True, missing_limit=0):
     """
     initial_rows = reading_data.shape[0]
 
-    # Dropping temperature as it is missing to many values
-    reading_data = reading_data.drop(columns=["temperature", "glasgow coma score"])
-
     # Convert measurements to numeric and filter to be in a realistic range as may be misreadings and placeholder values
-    reading_data[CATEGORIES] = reading_data[CATEGORIES].apply(
+    reading_data[MEASUREMENTS] = reading_data[MEASUREMENTS].apply(
         lambda col: pd.to_numeric(col, errors="coerce").where((col > 0) & (col < 1000), np.nan))
 
     if feature_ranges:

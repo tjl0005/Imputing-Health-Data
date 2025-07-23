@@ -2,7 +2,9 @@
 Exploring the limited and processed datasets. Results are printed to the console.
 """
 import pandas as pd
+from matplotlib import pyplot as plt
 
+from code.constants import MEASUREMENTS
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.max_colwidth", None)
@@ -60,10 +62,26 @@ def categorical_statistics(data):
     return {col: data[col].value_counts() for col in cat_cols}
 
 
-def statistics(data):
+def initial_statistics(data):
     print(data.describe())
     print(categorical_statistics(data))
 
     check_duplicates(data)
     death_statistics(data)
     check_missing_data(data)
+
+
+def check_distributions(data, data_ref="raw"):
+    fig, axes = plt.subplots(7, 2, figsize=(15, 20))
+    axes = axes.flatten()
+
+    # Plot each measurement
+    for i, col in enumerate(MEASUREMENTS):
+        axes[i].boxplot(data[col].dropna(), vert=False)
+        axes[i].set_title(col)
+        axes[i].set_xlabel(col)
+        axes[i].grid(True)
+
+    fig.suptitle('Boxplots of Measurements in {} data'.format(data_ref), fontsize=20, y=1.0001)
+    plt.tight_layout()
+    plt.savefig("../visualisations/distributions/{}.png".format(data_ref))

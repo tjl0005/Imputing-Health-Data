@@ -3,7 +3,7 @@ Preparing the EHR data to be used with the Imputation Models
 """
 import os
 import pandas as pd
-from code.constants import ICU_STAYS_FILE, HOSP_DIR
+from code.constants import ICU_STAYS_FILE, HOSP_DIR, MEASUREMENTS
 
 
 def limit_to_appropriate_patients(data):
@@ -13,14 +13,19 @@ def limit_to_appropriate_patients(data):
     :param data: Original EHR data
     :return: Reduced dataset for initial statistics and further cleaning
     """
+    print("Original length: {}".format(len(data)))
+
     # Ensuring of age
     data = data[data["anchor_age"] > 18]
+    print("18+ length: {}".format(len(data)))
 
     # Only keeping first ICU stays for each subject
     data = data.sort_values(by=["subject_id", "admittime"]).drop_duplicates(subset="subject_id", keep="first")
+    print("First Stays length: {}".format(len(data)))
 
     # Limiting to stays between 12hrs and 10 days
     data = data[(data["los"] >= 0.5) & (data["los"] <= 10)]
+    print("Stay between 12hrs and 10 days length: {}".format(len(data)))
 
     # Adding prediction value column, limiting to survival only
     data["outcome"] = data["discharge_location"].where(data["discharge_location"] == "DIED", "SURVIVED")
@@ -30,7 +35,7 @@ def limit_to_appropriate_patients(data):
         ["intime", "outtime", "dischtime", "discharge_location", "deathtime", "admit_provider_id", "edregtime",
          "edouttime", "hospital_expire_flag", "anchor_year", "anchor_year_group", "dod", "language",
          "marital_status", "race", "insurance", "discharge_location", "subject_idhosp", "last_careunit",
-         "hadm_id"], axis=1)
+         "hadm_id", "los", "gender", "admission_type", "admission_location", "first_careunit"], axis=1)
 
     return data
 
@@ -86,3 +91,56 @@ def process_into_full_icu_stays():
     icu_stays.to_csv("../data/icu_stays.csv", index=False, header=True)
 
     return icu_stays
+
+
+def remove_missing_flags_and_impossible_data(data, enforce_limits=True):
+    for measurement in MEASUREMENTS:
+        # Counting how many values there already are and excluding already missing ones
+        original_missing_count = data[measurement].isna().sum()
+        original_count = len(data)  # Total number of rows in the data (including missing ones)
+        original_missing_percentage = (original_missing_count / original_count) * 100
+
+        print("\n{}".format(measurement))
+        print("Originally missing {:.2f}%".format(original_missing_percentage))
+
+        # Removing flagged values or those that are misinputs
+        data.loc[data[measurement] > 999, measurement] = float('nan')
+        data.loc[data[measurement] < 0.1, measurement] = float('nan')
+
+        # Applying variable specific limits
+        if enforce_limits:
+            if measurement == "FiO2":
+                data.loc[(data[measurement] < 0) | (data[measurement] > 100), measurement] = float('nan')
+            elif measurement == "heart rate":
+                data.loc[(data[measurement] > 250), measurement] = float('nan')
+            elif measurement == "respiratory rate":
+                data.loc[(data[measurement] > 175), measurement] = float('nan')
+            elif measurement == "PCO2 (Arterial)":
+                data.loc[(data[measurement] > 150), measurement] = float('nan')
+            elif measurement == "sodium":
+                data.loc[(data[measurement] > 180), measurement] = float('nan')
+            elif measurement == "hematocrit":
+                data.loc[(data[measurement] > 25), measurement] = float('nan')
+            elif measurement == "postassium":
+                data.loc[(data[measurement] > 10), measurement] = float('nan')
+            elif measurement == "creatinine":
+                data.loc[(data[measurement] > 25), measurement] = float('nan')
+            elif measurement == "white blood cell":
+                data.loc[(data[measurement] > 400), measurement] = float('nan')
+            elif measurement == "HCO3 (serum)":
+                data.loc[(data[measurement] > 60), measurement] = float('nan')
+
+        # Checking how many have been removed due to outliers
+        new_missing_count = data[measurement].isna().sum()
+        outliers_removed = new_missing_count - original_missing_count
+        outliers_percentage = (outliers_removed / original_count) * 100
+
+        print("Flagged as Impossible {:.2f}%".format(outliers_percentage))
+
+        # Final missing percentage after outlier replacement
+        final_missing_count = data[measurement].isna().sum()
+        final_missing_percentage = (final_missing_count / original_count) * 100
+
+        print("Final Missing Data: {:.2f}%".format(final_missing_percentage))
+
+    return data

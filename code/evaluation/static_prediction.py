@@ -11,16 +11,10 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, confu
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
 from code.constants import CATEGORICAL_FEATURES, COMPLETE_FEATURES, GRID_SEARCH_OUTPUT, PREDICTION_GS_RECORD, \
-    GRID_SEARCH_RESULT_COLUMNS, XGBOOST_PARAMS
+    GRID_SEARCH_RESULT_COLUMNS, XGBOOST_PARAMS, MEASUREMENTS
 
 # Used to convert outcome into binary
 le = LabelEncoder()
-
-# Currently using downsampled ground-truth data
-# apache_scores = pd.read_csv("../../data/scores/measurements_0_downsample.csv")
-apache_scores = pd.read_csv("../../data/missing/resampled/measurements_0_downsample.csv")
-
-apache_scores["outcome_encoded"] = le.fit_transform(apache_scores["outcome"])
 
 
 def data_setup(score_data):
@@ -31,24 +25,25 @@ def data_setup(score_data):
     :return: X_train, X_test, y_train, y_test
     """
     # Splitting into features and target variables
-    X = score_data[COMPLETE_FEATURES].copy()
+    X = score_data[MEASUREMENTS].copy()
     y = score_data["outcome_encoded"].copy()
 
     # Splitting into training and test data, stratifying due to limited data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=507, stratify=y)
 
-    for col in CATEGORICAL_FEATURES:
-        X_train[col] = X_train[col].astype("category")
-        X_test[col] = X_test[col].astype("category")
+    # for col in CATEGORICAL_FEATURES:
+    #     X_train[col] = X_train[col].astype("category")
+    #     X_test[col] = X_test[col].astype("category")
 
     return X_train, X_test, y_train, y_test
 
 
-# TODO: Use this in the pipeline to maximise f-1
 def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_importance=False, roc=False, gamma=0.01, learning_rate=0.001,
                        max_depth=3, n_estimators=100, n_splits=5):
     """
     Perform cross-validation for XGBClassifier outside of grid search.
+    :param roc:
+    :param feature_importance:
     :param score_data: Full dataset to perform cross-validation on
     :param plot: Boolean - Decide whether to produce feature importance plot for the resulting model
     :param output_stats: Boolean - Decide whether to print metrics of the model including F-1 and confusion matrix
@@ -61,12 +56,12 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_
     :return: Metrics for model performance, average of cross validation
     """
     # Splititng the data and using encoded prediction variable
-    X = score_data[COMPLETE_FEATURES].copy()
+    X = score_data[MEASUREMENTS].copy()
     y = score_data["outcome_encoded"].copy()
 
     # Ensuring categorical features are set up correctly
-    for col in CATEGORICAL_FEATURES:
-        X[col] = X[col].astype("category")
+    # for col in CATEGORICAL_FEATURES:
+    #     X[col] = X[col].astype("category")
 
     # Using stratified folds to ensure an even distribution of mortalities
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=507)
@@ -81,7 +76,6 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_
     # Cross validation across the found splits
     for fold_no, (train_index, test_index) in enumerate(skf.split(X, y), 0):
         fold_no += 1
-        print("Fold no:", fold_no)
 
         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y[train_index], y[test_index]
@@ -173,22 +167,22 @@ def xgb_feature_importance(model, model_name):
     plt.savefig("../../visualisations/gs/{}_feature_importance.png".format(model_name))
 
 
-def grid_search_optimisation(score_data, search_reference="no missing data"):
+def xgb_grid_search_optimisation(score_data, search_reference="no missing data", save_results=True):
     """
     Perform a grid search hyperparameter optimisation for XGBoost using the specified parameters in constants.py.
     Models are evaluated using accuracy, recall and the F-1 score with cross validation.
     :param score_data: The training data as a dataframe, this will be prepared through the defined function prior.
     :param search_reference: Used to label saved results
     """
-    # Setting up model "template" for grid search
+    # Setting up model for grid search
     xgb_model = xgb.XGBClassifier(enable_categorical=True)
-    stratified_cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=507)
+    stratified_cv = StratifiedKFold(n_splits=10, shuffle=True, random_state=507)
     X_train, X_test, y_train, y_test = data_setup(score_data)
 
     # Defining and performing grid search with evaluation of F1
     grid_search = GridSearchCV(estimator=xgb_model, param_grid=XGBOOST_PARAMS,
-                               scoring=["accuracy", "precision", "recall", "f1"], refit="f1", cv=stratified_cv,
-                               verbose=2)
+                               scoring=["accuracy", "precision", "recall", "f1", "roc_auc"], refit="f1", cv=stratified_cv,
+                               verbose=0)
     grid_search.fit(X_train, y_train)
 
     # Display the best parameters and results
@@ -200,17 +194,22 @@ def grid_search_optimisation(score_data, search_reference="no missing data"):
     df = df[GRID_SEARCH_RESULT_COLUMNS]
     df = df.sort_values("mean_test_f1", ascending=False)
 
-    save_dir = GRID_SEARCH_OUTPUT + search_reference + ".csv"
-    df.to_csv(save_dir, index=False)
-
     # Recording the best results of all grid searches with given reference
     best_result = df.iloc[0].to_frame().T
-    best_result["test_name"] = search_reference
 
-    if not os.path.exists(PREDICTION_GS_RECORD):
-        best_result.to_csv(PREDICTION_GS_RECORD, index=False)
+    if save_results:
+        save_dir = GRID_SEARCH_OUTPUT + search_reference + ".csv"
+        df.to_csv(save_dir, index=False)
+        best_result["test_name"] = search_reference
+
+        if not os.path.exists(PREDICTION_GS_RECORD):
+            best_result.to_csv(PREDICTION_GS_RECORD, index=False)
+        else:
+            best_result.to_csv(PREDICTION_GS_RECORD, mode="a", header=False, index=False)
+
+        return None
     else:
-        best_result.to_csv(PREDICTION_GS_RECORD, mode="a", header=False, index=False)
+        return best_result
 
 
 def plot_grid_search_results(gs_results, reference):
@@ -232,7 +231,8 @@ def plot_grid_search_results(gs_results, reference):
         recall_mean=("mean_test_recall", "mean"),
         recall_std=("std_test_recall", "mean"),
         f1_mean=("mean_test_f1", "mean"),
-        f1_std=("std_test_f1", "mean")
+        f1_std=("std_test_f1", "mean"),
+
     ).reset_index()
 
     # Setting up plot with details
@@ -288,5 +288,5 @@ def summarise_grid_search(score_data, search_reference="no missing data"):
                        )
 
 
-grid_search_optimisation(apache_scores)
-summarise_grid_search(apache_scores)
+# grid_search_optimisation(apache_scores)
+# summarise_grid_search(apache_scores)
