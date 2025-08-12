@@ -2,11 +2,10 @@
 Given a complete dataset, create artificially missing data either MCAR or MNAR. Descriptions of
 how are in the docstrings for each function. The output is intended to be used in evaluating 
 imputation through ground truth.
-NOTE: Not implemented in main.py currently.
 """
 import numpy as np
 import pandas as pd
-from code.constants import MEASUREMENTS
+from code.constants import MEASUREMENTS, ARTIFICIAL_MISSING_PERCENTAGES
 
 np.random.seed(50701)
 
@@ -26,7 +25,7 @@ def remove_given_indices(data, selected_indices, missing_percentage, n_cols):
     n_missing = int(total_values * missing_percentage)
 
     # Tracking how many values are missing per row, not currently used but can be used to limit rows to having x values
-    # row_missing_count = {row: data.iloc[row].isna().sum() for row in range(n_rows)}
+    row_missing_count = {row: data.iloc[row].isna().sum() for row in range(n_rows)}
 
     missing_pairs = []
     missing_data = data.copy()
@@ -121,8 +120,8 @@ def missing_at_random_extremes(data, missing_percentage, columns, p=0.2):
     extreme_missing_rate_half = extreme_missing_rate / 2
     random_missing_rate_half = random_missing_rate / 2
 
-    print("\nRemoving {:.2f}% at random followed by {:.2f}% at extremes ({:.2f}% for each extreme)".format(random_missing_rate * 100,
-                                                                                extreme_missing_rate * 100, extreme_missing_rate_half * 100))
+    print("\nRemoving {:.2f}% at random followed by {:.2f}% at extremes ({:.2f}% for each extreme)".format(
+        random_missing_rate * 100, extreme_missing_rate * 100, extreme_missing_rate_half * 100))
 
     # Values that are within specified standard deviations and can be randomly removed
     lower_extremes, upper_extremes = [], []
@@ -161,6 +160,13 @@ def missing_at_random_extremes(data, missing_percentage, columns, p=0.2):
 
 
 def generate_missing_data(missing_percentage, complete_data_dir, artificial_dir):
+    """
+    For the given data directory and percentage this will remove data through the given missing mechanisms described in
+    the README.
+    :param missing_percentage: A float representing how much data should be removed. i.e. 0.2 is 20%.
+    :param complete_data_dir: The directory of the ground truth data so it can be used as the starting point.
+    :param artificial_dir: The directory of the artificial data to be saved to.
+    """
     # Measurements with no data missing - acts as a ground truth
     complete_measurements = pd.read_csv(complete_data_dir)
 
@@ -168,21 +174,31 @@ def generate_missing_data(missing_percentage, complete_data_dir, artificial_dir)
     mcar.to_csv("{}/measurements_{}_mcar.csv".format(artificial_dir, missing_percentage), index=False, header=True)
 
     mnar_central = missing_at_random_central(complete_measurements, missing_percentage, MEASUREMENTS, 1)
-    mnar_central.to_csv("{}/measurements_{}_mnar_central.csv".format(artificial_dir ,missing_percentage), index=False, header=True)
+    mnar_central.to_csv("{}/measurements_{}_mnar_central.csv".format(artificial_dir, missing_percentage), index=False,
+                        header=True)
 
     # Using p 0.25 so 25% of the missingness will be random
     mnar_lower, mnar_upper = missing_at_random_extremes(complete_measurements, missing_percentage, MEASUREMENTS, 0.1)
-    mnar_lower.to_csv("{}/measurements_{}_mnar_lower.csv".format(artificial_dir, missing_percentage), index=False, header=True)
-    mnar_upper.to_csv("{}/measurements_{}_mnar_upper.csv".format(artificial_dir, missing_percentage), index=False, header=True)
+    mnar_lower.to_csv("{}/measurements_{}_mnar_lower.csv".format(artificial_dir, missing_percentage), index=False,
+                      header=True)
+    mnar_upper.to_csv("{}/measurements_{}_mnar_upper.csv".format(artificial_dir, missing_percentage), index=False,
+                      header=True)
 
 
-def create_artificially_missing_datasets(complete_data_dir, artificial_dir):
+def create_artificially_missing_datasets(complete_data_dir, artificial_dir, missing_levels=None):
+    """
+    Remove data under the mechanisms described in the README for artificially missing. Applied at each of the given
+    levels of missingess to the ground truth dataset.
+    :param complete_data_dir: The directory of the ground truth data.
+    :param artificial_dir: The directory to save the artificially missing data to.
+    :param missing_levels: List containing the levels of missing values to be removed. Default is the one specified in
+    constants.
+    :return:
+    """
+    if missing_levels is None:
+        missing_levels = ARTIFICIAL_MISSING_PERCENTAGES
+
     # Producing datasets with different percentages of missingness
-    print("Removing at 20%")
-    generate_missing_data(0.2, complete_data_dir, artificial_dir)
-
-    print("Removing at 50%")
-    generate_missing_data(0.5, complete_data_dir, artificial_dir)
-
-    print("Removing at 70%")
-    generate_missing_data(0.7, complete_data_dir, artificial_dir)
+    for m_level in missing_levels:
+        print("Removing data at {}%".format(m_level * 100))
+        generate_missing_data(m_level, complete_data_dir, artificial_dir)

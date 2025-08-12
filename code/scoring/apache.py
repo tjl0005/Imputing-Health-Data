@@ -1,8 +1,9 @@
 """
-Given worst readings from the past 24 hours this file is used to generate the Apache-II scores for all subjects.
+Given worst readings from the past 24 hours this file is used to generate the Apache-II scores for all subjects. This
+is not used in the final version of the project but can be used if desired and is fully functional.
 """
 import numpy as np
-from code.constants import CATEGORIES
+from code.constants import MEASUREMENTS
 
 
 def decide_oxygenation_metric(fi_o2, pa_co2, pa_o2):
@@ -24,7 +25,7 @@ def decide_oxygenation_metric(fi_o2, pa_co2, pa_o2):
         return "A-aDO2", a_a_do2
     else:
         # Wrong unit used in original. Converting from mmHg to kPa
-        pa_o2 = pa_o2 * 0.133
+        pa_o2 *= 0.133
         return "PaO2", pa_o2
 
 
@@ -60,7 +61,7 @@ def calculate_single_scores(category, reading, pa_co2=None, pa_o2=None):
     elif category == "sodium":
         ranges = ([180, 300, 4], [160, 179, 3], [155, 159, 2], [150, 154, 1], [130, 149, 0], [120, 129, 2],
                   [111, 119, 3], [50, 110, 4])
-    elif category == "postassium":
+    elif category == "potassium":
         ranges = ([7, 9, 4], [6, 6.9, 3], [5.5, 5.9, 1], [3.5, 5.4, 0], [3, 3.4, 1], [2.5, 2.9, 2], [2.5, 2, 4])
     elif category == "creatinine":
         ranges = ([3.5, 30, 4], [2, 3.4, 3], [1.5, 1.9, 2], [0.6, 1.4, 0], [0, 0.6, 2])
@@ -91,7 +92,7 @@ def apply_scores(row):
     :return: the row with the columns updated to contain their relevant APACHE II scores
     """
     # Iterate over the categories and update the corresponding column with its score
-    for category in CATEGORIES:
+    for category in MEASUREMENTS:
         reading = row[category]
 
         # For FiO2, need the additional pa_co2 and pa_o2 values

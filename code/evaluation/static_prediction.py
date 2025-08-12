@@ -7,11 +7,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix, f1_score, roc_auc_score, roc_curve
-from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, confusion_matrix, f1_score, roc_auc_score,
+                             roc_curve)
+from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
-from code.constants import CATEGORICAL_FEATURES, COMPLETE_FEATURES, GRID_SEARCH_OUTPUT, PREDICTION_GS_RECORD, \
-    GRID_SEARCH_RESULT_COLUMNS, XGBOOST_PARAMS, MEASUREMENTS
+from skopt import BayesSearchCV
+
+from code.constants import (GRID_SEARCH_OUTPUT, PREDICTION_GS_RECORD, GRID_SEARCH_RESULT_COLUMNS, XGBOOST_PARAMS,
+                            MEASUREMENTS)
 
 # Used to convert outcome into binary
 le = LabelEncoder()
@@ -29,24 +32,19 @@ def data_setup(score_data):
     y = score_data["outcome_encoded"].copy()
 
     # Splitting into training and test data, stratifying due to limited data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=507, stratify=y)
-
-    # for col in CATEGORICAL_FEATURES:
-    #     X_train[col] = X_train[col].astype("category")
-    #     X_test[col] = X_test[col].astype("category")
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=507, stratify=y)
 
     return X_train, X_test, y_train, y_test
 
 
-def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_importance=False, roc=False, gamma=0.01, learning_rate=0.001,
-                       max_depth=3, n_estimators=100, n_splits=5):
+def cross_validate_xgb(score_data, model_name=None, output_stats=False, show_feature_importance=False,
+                       show_roc_auc=False, gamma=0.01, learning_rate=0.001, max_depth=3, n_estimators=100, n_splits=5):
     """
     Perform cross-validation for XGBClassifier outside of grid search.
-    :param roc:
-    :param feature_importance:
     :param score_data: Full dataset to perform cross-validation on
-    :param plot: Boolean - Decide whether to produce feature importance plot for the resulting model
     :param output_stats: Boolean - Decide whether to print metrics of the model including F-1 and confusion matrix
+    :param show_feature_importance: Boolean specifying whether to plot the feature importance plot for the final model.
+    :param show_roc_auc: Boolean specifying whether to plot the ROC-AUC curve for the final model.
     :param model_name: Reference for the model when plotting or outputting results
     :param gamma: Minimum loss reduction required to make a further partition on a leaf node of the tree
     :param learning_rate: Step size of optimisation
@@ -55,23 +53,17 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_
     :param n_splits: Number of stratified folds
     :return: Metrics for model performance, average of cross validation
     """
-    # Splititng the data and using encoded prediction variable
+    # Splitting the data and using encoded prediction variable
     X = score_data[MEASUREMENTS].copy()
     y = score_data["outcome_encoded"].copy()
-
-    # Ensuring categorical features are set up correctly
-    # for col in CATEGORICAL_FEATURES:
-    #     X[col] = X[col].astype("category")
 
     # Using stratified folds to ensure an even distribution of mortalities
     skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=507)
 
     # Track the metrics for each of the models
-    accuracies = []
-    precisions = []
-    recalls = []
-    f1s = []
-    aucs = []
+    accuracies, precisions, recalls, f1s, roc_aucs = [], [], [], [], []
+
+    predictions = None
 
     # Cross validation across the found splits
     for fold_no, (train_index, test_index) in enumerate(skf.split(X, y), 0):
@@ -94,19 +86,24 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_
         recalls.append(recall_score(y_test, predictions, pos_label=0))
         f1s.append(f1_score(y_test, predictions, pos_label=0))
 
-        # Finding AUC
+        # Finding and tracking AUC
         prob_predictions = model.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, prob_predictions)
-        aucs.append(auc)
+        roc_auc = roc_auc_score(y_test, prob_predictions)
+        roc_aucs.append(roc_auc)
+
+    if predictions is None:
+        raise AssertionError("No predictions were made")
 
     # Using feature importance of the last model
-    if feature_importance:
+    if show_feature_importance:
         xgb_feature_importance(model, model_name)
-    if roc:
+    if show_roc_auc:
         plot_roc(model, X_test, y_test, model_name)
 
     # Averaging metrics to get better idea of performance
-    accuracy, precision, recall, f1, auc = (np.mean(accuracies)), np.mean(precisions), np.mean(recalls), np.mean(f1s), np.mean(aucs)
+    accuracy, precision, recall, f1, auc = ((np.mean(accuracies)), np.mean(precisions), np.mean(recalls), np.mean(f1s),
+                                            np.mean(roc_aucs)
+                                            )
 
     # Confusion matrix to see what the model is doing prediction wise
     cm = confusion_matrix(y_test, predictions)
@@ -115,7 +112,7 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_
     # Printing metrics of cross validation
     if output_stats:
         print("Stats for {}".format(model_name))
-        print("Accuracy: {:.2f}%".format((accuracy * 100)))
+        print("Accuracy: {:.2f}%".format(accuracy * 100))
         print("Precision: {:.2f}".format(precision))
         print("Recall: {:.2f}".format(recall))
         print("F1-Score: {:.2f}".format(f1))
@@ -132,6 +129,14 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, feature_
 
 
 def plot_roc(model, X_test, y_test, model_name):
+    """
+    Given the XGBoost model, the test training data and test labels and the model name this will plot the ROC curve.
+    :param model: The trained prediction model to be used to find the probabilities for ROC
+    :param X_test: The feature test dataset
+    :param y_test: The label test dataset
+    :param model_name: The reference for the model to identify the visualisation and file.
+    :return:
+    """
     prob_predictions = model.predict_proba(X_test)[:, 1]  # Get probabilities for ROC
 
     # Compute ROC curve
@@ -139,15 +144,17 @@ def plot_roc(model, X_test, y_test, model_name):
 
     # Plot ROC curve
     plt.figure()
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (AUC = %0.2f)' % roc_auc_score(y_test, prob_predictions))
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.plot(fpr, tpr, color="darkorange", lw=2,
+             label="ROC curve (AUC = %0.2f)" % roc_auc_score(y_test, prob_predictions))
+    plt.plot([0, 1], [0, 1], color="navy", lw=2, linestyle="--")
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate (Recall)')
-    plt.title(f'Receiver Operating Characteristic - {model_name}')
-    plt.legend(loc='lower right')
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate (Recall)")
+    plt.title("Receiver Operating Characteristic - {}".format(model_name))
+    plt.legend(loc="lower right")
     plt.savefig("../../visualisations/gs/{}_auc_roc.png".format(model_name))
+    plt.close()
 
 
 def xgb_feature_importance(model, model_name):
@@ -159,12 +166,19 @@ def xgb_feature_importance(model, model_name):
     feature_importance = model.feature_importances_
 
     # Plotting feature importance
-    plt.barh(COMPLETE_FEATURES, feature_importance)
+    plt.figure()
+    bars = plt.barh(range(len(MEASUREMENTS)), feature_importance)
+    plt.yticks(range(len(MEASUREMENTS)), MEASUREMENTS)
     plt.xlabel("Feature Importance Score")
     plt.ylabel("Features")
     plt.title("Feature Importance for {}".format(model_name))
 
+    for i, (bar, score) in enumerate(zip(bars, feature_importance)):
+        plt.text(score + 0.01, i, f"{score:.3f}", va="center", fontsize=8)
+
+    plt.tight_layout()
     plt.savefig("../../visualisations/gs/{}_feature_importance.png".format(model_name))
+    plt.close()
 
 
 def xgb_grid_search_optimisation(score_data, search_reference="no missing data", save_results=True):
@@ -173,6 +187,7 @@ def xgb_grid_search_optimisation(score_data, search_reference="no missing data",
     Models are evaluated using accuracy, recall and the F-1 score with cross validation.
     :param score_data: The training data as a dataframe, this will be prepared through the defined function prior.
     :param search_reference: Used to label saved results
+    :param save_results: Boolean flag specifying whether the results will be saved to a csv file or not.
     """
     # Setting up model for grid search
     xgb_model = xgb.XGBClassifier(enable_categorical=True)
@@ -180,19 +195,19 @@ def xgb_grid_search_optimisation(score_data, search_reference="no missing data",
     X_train, X_test, y_train, y_test = data_setup(score_data)
 
     # Defining and performing grid search with evaluation of F1
-    grid_search = GridSearchCV(estimator=xgb_model, param_grid=XGBOOST_PARAMS,
-                               scoring=["accuracy", "precision", "recall", "f1", "roc_auc"], refit="f1", cv=stratified_cv,
-                               verbose=0)
-    grid_search.fit(X_train, y_train)
+    bayes_search = BayesSearchCV(estimator=xgb_model, search_spaces=XGBOOST_PARAMS,
+                                 scoring=["accuracy", "precision", "recall", "f1", "roc_auc"],
+                                 refit="roc_auc", n_iter=20, cv=stratified_cv, verbose=0)
+    bayes_search.fit(X_train, y_train)
 
     # Display the best parameters and results
-    print(grid_search.best_params_)
-    print(grid_search.best_score_)
+    print(bayes_search.best_params_)
+    print(bayes_search.best_score_)
 
     # Saving results of grid search in order of F1 score
-    df = pd.DataFrame(grid_search.cv_results_)
+    df = pd.DataFrame(bayes_search.cv_results_)
     df = df[GRID_SEARCH_RESULT_COLUMNS]
-    df = df.sort_values("mean_test_f1", ascending=False)
+    df = df.sort_values("mean_test_roc_auc", ascending=False)
 
     # Recording the best results of all grid searches with given reference
     best_result = df.iloc[0].to_frame().T
@@ -284,9 +299,6 @@ def summarise_grid_search(score_data, search_reference="no missing data"):
     cross_validate_xgb(score_data, search_reference, gamma=best_result["param_gamma"],
                        n_estimators=best_result["param_n_estimators"],
                        max_depth=best_result["param_max_depth"],
-                       learning_rate=best_result["param_learning_rate"], output_stats=True, feature_importance=True, roc=True
+                       learning_rate=best_result["param_learning_rate"], output_stats=True,
+                       show_feature_importance=True, show_roc_auc=True
                        )
-
-
-# grid_search_optimisation(apache_scores)
-# summarise_grid_search(apache_scores)

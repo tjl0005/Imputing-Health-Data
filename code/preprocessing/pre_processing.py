@@ -94,6 +94,13 @@ def process_into_full_icu_stays():
 
 
 def remove_missing_flags_and_impossible_data(data, enforce_limits=True):
+    """
+    Given the EHR data with measurements remove any values which have been flagged as missing or invalid i.e. 9999. If 
+    specified this will also remove extreme values which are impossible in medical context.
+    :param data: The data to remove values from.
+    :param enforce_limits: Boolean to specify whether impossible values should be removed or not.
+    :return: Updated version of the dataset.
+    """
     for measurement in MEASUREMENTS:
         # Counting how many values there already are and excluding already missing ones
         original_missing_count = data[measurement].isna().sum()
@@ -104,31 +111,31 @@ def remove_missing_flags_and_impossible_data(data, enforce_limits=True):
         print("Originally missing {:.2f}%".format(original_missing_percentage))
 
         # Removing flagged values or those that are misinputs
-        data.loc[data[measurement] > 999, measurement] = float('nan')
-        data.loc[data[measurement] < 0.1, measurement] = float('nan')
+        data.loc[data[measurement] > 999, measurement] = float("nan")
+        data.loc[data[measurement] < 0.1, measurement] = float("nan")
 
         # Applying variable specific limits
         if enforce_limits:
             if measurement == "FiO2":
-                data.loc[(data[measurement] < 0) | (data[measurement] > 100), measurement] = float('nan')
+                data.loc[(data[measurement] < 0) | (data[measurement] > 100), measurement] = float("nan")
             elif measurement == "heart rate":
-                data.loc[(data[measurement] > 250), measurement] = float('nan')
+                data.loc[(data[measurement] > 250), measurement] = float("nan")
             elif measurement == "respiratory rate":
-                data.loc[(data[measurement] > 175), measurement] = float('nan')
+                data.loc[(data[measurement] > 175), measurement] = float("nan")
             elif measurement == "PCO2 (Arterial)":
-                data.loc[(data[measurement] > 150), measurement] = float('nan')
+                data.loc[(data[measurement] > 150), measurement] = float("nan")
             elif measurement == "sodium":
-                data.loc[(data[measurement] > 180), measurement] = float('nan')
+                data.loc[(data[measurement] > 180), measurement] = float("nan")
             elif measurement == "hematocrit":
-                data.loc[(data[measurement] > 25), measurement] = float('nan')
-            elif measurement == "postassium":
-                data.loc[(data[measurement] > 10), measurement] = float('nan')
+                data.loc[(data[measurement] > 25), measurement] = float("nan")
+            elif measurement == "potassium":
+                data.loc[(data[measurement] > 10), measurement] = float("nan")
             elif measurement == "creatinine":
-                data.loc[(data[measurement] > 25), measurement] = float('nan')
+                data.loc[(data[measurement] > 25), measurement] = float("nan")
             elif measurement == "white blood cell":
-                data.loc[(data[measurement] > 400), measurement] = float('nan')
+                data.loc[(data[measurement] > 400), measurement] = float("nan")
             elif measurement == "HCO3 (serum)":
-                data.loc[(data[measurement] > 60), measurement] = float('nan')
+                data.loc[(data[measurement] > 60), measurement] = float("nan")
 
         # Checking how many have been removed due to outliers
         new_missing_count = data[measurement].isna().sum()

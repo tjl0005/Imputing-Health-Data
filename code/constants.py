@@ -1,6 +1,8 @@
 """
-Constants used throughout the code, specifying directories, files, etc. 
+Constants used throughout the code, specifying directories, files, etc. It is not the most tidy.
 """
+from skopt.space import Categorical
+
 # Directories for main.py
 CHART_EVENTS_INPUT = "../data/icu/chartevents.csv"
 ZERO_MISSING_INPUT = "../data/missing/resampled/measurements_0_downsample.csv"
@@ -36,7 +38,7 @@ CHUNK_SIZE = 2000000
 
 # Lists used throughout
 MEASUREMENTS = ["mean arterial pressure", "heart rate", "respiratory rate", "PCO2 (Arterial)", "PO2 (Arterial)", "FiO2",
-              "arterial pH", "sodium", "postassium", "creatinine", "hematocrit", "white blood cell", "HCO3 (serum)",
+                "arterial pH", "sodium", "potassium", "creatinine", "hematocrit", "white blood cell", "HCO3 (serum)",
                 "anchor_age"]
 
 NON_SCORED_COLUMNS = ["subject_id", "first_careunit", "los", "admittime", "admission_type", "admission_location",
@@ -44,7 +46,7 @@ NON_SCORED_COLUMNS = ["subject_id", "first_careunit", "los", "admittime", "admis
 
 COMPLETE_FEATURES = ["FiO2", "admission_location", "admittime", "anchor_age",
                      "arterial pH", "creatinine", "first_careunit", "gender", "heart rate", "hematocrit",
-                     "mean arterial pressure", "postassium", "respiratory rate", "sodium", "white blood cell"]
+                     "mean arterial pressure", "potassium", "respiratory rate", "sodium", "white blood cell"]
 
 CATEGORICAL_FEATURES = ["admission_location", "admittime", "first_careunit", "gender"]
 ID_COLS = ["subject_id", "stay_id"]
@@ -52,35 +54,36 @@ FEATURE_COLUMNS = ["charttime", "itemid", "value"]
 GRID_SEARCH_RESULT_COLUMNS = ["param_gamma", "param_learning_rate", "param_max_depth", "param_n_estimators",
                               "mean_test_accuracy", "std_test_accuracy", "mean_test_precision", "std_test_precision",
                               "mean_test_recall", "std_test_recall", "mean_test_f1", "std_test_f1", "std_test_roc_auc",
-                                                                                                    "mean_test_roc_auc"]
+                              "mean_test_roc_auc"]
+DOWNSTREAM_METRICS = ["precision", "recall", "accuracy", "f1", "roc_auc"]
 MISSING_TYPES = ["mcar", "mnar_central", "mnar_lower", "mnar_upper"]
-IMPUTATION_DIRECTORIES = ["mean", "knn", "mice"]
-
+NON_OPTIMISED_IMPUTERS = ["median", "mean", "gain", "miwae"]
+NON_DL_IMPUTERS = ["mean", "knn", "mice"]
+DL_IMPUTERS = ["wgain", "miwae"]
+RAW_MISSING_LEVELS = [2, 5, 10]
+ARTIFICIAL_MISSING_PERCENTAGES = [0.2, 0.5, 0.7]
 
 # Training parameters
 XGBOOST_PARAMS = {
-    "gamma": [0.01, 0.1],
-    "learning_rate": [0.001, 0.01, 0.1],
-    "max_depth": [3, 6, 9],
-    "n_estimators": [100, 200, 300]
+    "gamma": Categorical([0.01, 0.1]),
+    "learning_rate": Categorical([0.001, 0.01, 0.1]),
+    "max_depth": Categorical([3, 6, 9]),
+    "n_estimators": Categorical([100, 200, 300])
 }
 PARAM_TYPES = {
-    'param_gamma': float,
-    'param_learning_rate': float,
-    'param_max_depth': int,
-    'param_n_estimators': int
+    "param_gamma": float,
+    "param_learning_rate": float,
+    "param_max_depth": int,
+    "param_n_estimators": int
 }
 KNN_PARAMS = {
-    "n_neighbors": [3, 5, 10, 15, 20]
+    "n_neighbors": [3, 5, 10, 15, 20, 30]
 }
 MICE_PARAMS = {
     "max_iters": [20, 50, 100, 200],
 }
 MICE_FOREST_PARAMS = {
     "max_iters": [20, 50, 100]
-}
-GAIN_PARAMS = {
-    "temp_imputer": ["mean", "knn"]
 }
 GCS_MOTOR = {
     "None": 1,

@@ -8,20 +8,29 @@ from code.constants import CHUNK_SIZE, APACHE_FEATURES_FILE, ICU_STAYS_OUTPUT, I
 
 
 def map_gcs_scores(aspect, values):
+    """
+    Used to convert the glasgow coma score variables to their relevant score (not used in final project)
+    :param aspect: The glasgow coma score measurement i.e. Gcsmotor
+    :param values: The glasgow coma score values for the given aspect
+    :return: The valued updated to their given score.
+    """
     if aspect == "Gcsmotor":
         return values.map(lambda x: GCS_MOTOR.get(x))
     elif aspect == "Gcsverbal":
         return values.map(lambda x: GCS_VERBAL.get(x))
-    else:
+    elif aspect == "Gcseye":
         return values.map(lambda x: GCS_EYE.get(x))
+    else:
+        raise ValueError("Invalid aspect - must be either Gcsmotor, Gcsverbal, Gcseye")
 
 
-def find_interval_readings(data, worst_readings=True, interval=1, time=24):
+def find_interval_readings(data, worst_readings=True, time=24):
     """
     Given a dataset with the specified measurements this will return the worst readings for each of the measurements
     for each subject in the provided data chunk. The worst readings will be selected from the specified time interval.
     :param data: Dataset containing the specified measurements
-    :param interval: Number representing the hours passed since the patients admission
+    :param worst_readings: Boolean flag specifying whether to only keep the worst readings within the given time period.
+    :param time: An integer representing the timeframe to keep readings from, i.e. 24 is the first 24 hours of stay.
     :return: Data containing the worst readings for each measurement in the provided chunk
     """
     # Converting to datetime types
@@ -64,9 +73,10 @@ def find_interval_readings(data, worst_readings=True, interval=1, time=24):
 
                 readings.append(worst_rows)
             else:
-                measurement_data.loc[:, "hour"] = measurement_data["charttime"].dt.floor('h')
+                measurement_data.loc[:, "hour"] = measurement_data["charttime"].dt.floor("h")
 
-                hourly_avg = measurement_data.groupby(["hour", "subject_id", "measurement"])["value"].mean().reset_index()
+                hourly_avg = measurement_data.groupby(["hour", "subject_id", "measurement"])[
+                    "value"].mean().reset_index()
 
                 measurement_data = measurement_data.merge(hourly_avg, on=["hour", "subject_id", "measurement"],
                                                           suffixes=("", "_avg"))
@@ -79,19 +89,25 @@ def find_interval_readings(data, worst_readings=True, interval=1, time=24):
 
 
 def pivot_and_merge(readings_data, time_series=False):
+    """
+    Given the readings data this will pivot the measurements so they are columns and create one row per patient, to
+    improve the memory efficiency and readability of the file.
+    :param readings_data: Dataframe containing the readings' data.
+    :param time_series: Boolean to specify whether the data should be handled as timeseries.
+    :return: A pivoted version of the readings data with the measurements as columns.
+    """
     if time_series:
         final_readings_data = readings_data.pivot_table(index=["subject_id", "anchor_age", "time_diff"],
-                                    columns="measurement",
-                                    values="value",
-                                    aggfunc="first")
+                                                        columns="measurement", values="value", aggfunc="first")
 
-        # Step 2: Reset index and handle missing values (replace NaN with 'n/a')
         final_readings_data = final_readings_data.reset_index()
 
     else:
-        pivoted_readings_data = readings_data.pivot_table(index="subject_id", columns="measurement", values="value", aggfunc="max").reset_index()
+        pivoted_readings_data = readings_data.pivot_table(index="subject_id", columns="measurement", values="value",
+                                                          aggfunc="max").reset_index()
 
-        final_readings_data = pd.merge(readings_data[['subject_id', 'admittime', 'anchor_age', 'outcome', 'charttime']], pivoted_readings_data, on="subject_id", how="left")
+        final_readings_data = pd.merge(readings_data[["subject_id", "admittime", "anchor_age", "outcome", "charttime"]],
+                                       pivoted_readings_data, on="subject_id", how="left")
 
         final_readings_data = final_readings_data.drop_duplicates(subset=["subject_id"], keep="first")
 
@@ -122,7 +138,6 @@ def process_in_chunks(interval=24):
         print("removed old hourly readings file")
 
     # Need to process chart events in chunks due to memory usage
-    # NOTE: Remember to remove nrows limit
     for chunk in pd.read_csv(CHART_EVENTS_INPUT, usecols=ID_COLS + FEATURE_COLUMNS, chunksize=CHUNK_SIZE):
         chunk_num += 1
         print("Chunk {} with {} lines read in total".format(chunk_num, (chunk_num * CHUNK_SIZE)))
@@ -138,8 +153,10 @@ def process_in_chunks(interval=24):
                                                                                                        axis=1)
 
         # Get first readings and the worst readings for the current chunk
-        processed_worst_readings = find_interval_readings(combined_chunk, interval=interval).drop_duplicates(subset=["subject_id", "measurement"], keep="first")
-        processed_hourly_readings = find_interval_readings(combined_chunk, interval=interval, worst_readings=False).drop_duplicates(subset=["subject_id", "measurement", "hour"])
+        processed_worst_readings = find_interval_readings(combined_chunk).drop_duplicates(
+            subset=["subject_id", "measurement"], keep="first")
+        processed_hourly_readings = find_interval_readings(combined_chunk, worst_readings=False).drop_duplicates(
+            subset=["subject_id", "measurement", "hour"])
 
         # Appending chunk data to output files
         processed_worst_readings.to_csv(worst_readings_dir, mode="a", header=first_chunk, index=False)

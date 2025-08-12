@@ -1,24 +1,25 @@
 """
-Imputing EHR data through mean, k-NN and MICE.
-# Implement grid search
+Imputing EHR data through mean, k-NN and MICE. These are used in the ground_truth_optimisation and raw_optimisation
+files but can also be used elsewhere if the data is available.
 """
 import numpy as np
 import pandas as pd
-import xgboost
 import miceforest as mf
-from sklearn.experimental import enable_iterative_imputer
+from sklearn.experimental import enable_iterative_imputer  # required before importing IterativeImputer
 from sklearn.impute import SimpleImputer, KNNImputer, IterativeImputer
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
 from code.constants import MEASUREMENTS, IMPUTATION_OUTPUT
 
 scaler = MinMaxScaler()
 
+
 def single_impute(data, strategy="mean"):
     """
     Impute specified columns using mean values. (Not an example of multiple imputation but used for comparison)
     :param data: The dataset containing missing values.
+    :param strategy: The strategy to use to impute missing values. Either "mean" or "median".
     :return: Data with any missing values imputed with variable mean.
     """
     # Missing means they are nan and will be imputed using the mean
@@ -59,6 +60,7 @@ def mice_impute(data, estimator_choice="linear", max_iter=100):
     specified.
     :param data: Dataset containing missing values
     :param estimator_choice: Model to use for estimating missing values
+    :param max_iter: The maximum number of iterations to test with MICE.
     :return: THe dataset with missing values imputed using MICE
     """
     numerical_data = data[MEASUREMENTS]
@@ -78,15 +80,24 @@ def mice_impute(data, estimator_choice="linear", max_iter=100):
     return data
 
 
-def mice_forest_impute(data, num_datasets=2, max_iter=10, n_estimators=100, type="artificial"):
+def mice_forest_impute(data, num_datasets=2, max_iter=10, n_estimators=100):
+    """
+    Impute numeric columns through multiple imputation by chained equations. The estimator needs to be
+    specified.
+    :param data: Dataset containing missing values
+    :param num_datasets: Model to use for estimating missing values
+    :param max_iter: The maximum number of iterations to test with MICE.
+    :param n_estimators: The number of trees to fit.
+    :return: THe dataset with missing values imputed using MICE
+    """
     numerical_data = data[MEASUREMENTS]
 
     # Uses light-gbm and mean matching
-    miceForest_imputer = mf.ImputationKernel(numerical_data, num_datasets=num_datasets, random_state=502)
+    missforest_imputer = mf.ImputationKernel(numerical_data, num_datasets=num_datasets, random_state=502)
 
-    miceForest_imputer.mice(iterations=max_iter, n_estimators=n_estimators)
+    missforest_imputer.mice(iterations=max_iter, n_estimators=n_estimators)
 
-    imputed_data = miceForest_imputer.complete_data()
+    imputed_data = missforest_imputer.complete_data()
 
     if num_datasets > 1:
         print("Averaging {} imputed datasets for robust result".format(num_datasets))
@@ -114,8 +125,7 @@ def impute_and_save(data, imputation_type, file, k=5, estimator_choice="linear")
 
     # 0 represents 0 missing values per row
     if file == "measurements_0":
-        print("Cannot impute file with no missing values")
-        return
+        raise ValueError("Unable to impute ground truth data as it is complete")
     else:
         print("Imputing {} through {}".format(file, imputation_type))
 

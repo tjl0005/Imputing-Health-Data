@@ -9,6 +9,7 @@ from code.constants import MEASUREMENTS
 pd.set_option("display.max_columns", None)
 pd.set_option("display.max_colwidth", None)
 
+
 def check_duplicates(data):
     """
     Given a dataset check for any duplicate rows. If they exist a count will be printed and the identified rows returned
@@ -63,6 +64,11 @@ def categorical_statistics(data):
 
 
 def initial_statistics(data):
+    """
+    Given the dataset this will print statistics about the numerical and categorical columns. It will also check the
+    data for duplicates, the ratio of mortality outcomes and check the levels of missingness.
+    :param data: Dataframe containing the features to be checked.
+    """
     print(data.describe())
     print(categorical_statistics(data))
 
@@ -72,6 +78,12 @@ def initial_statistics(data):
 
 
 def check_distributions(data, data_ref="raw"):
+    """
+    Check the distributions of each of the features in the given dataset. Creates box plot visualisations to show the
+    distributions of each of the features.
+    :param data: Dataframe containing the features to be checked.
+    :param data_ref: Reference for the data to be used in the plot title.
+    """
     fig, axes = plt.subplots(7, 2, figsize=(15, 20))
     axes = axes.flatten()
 
@@ -82,6 +94,6 @@ def check_distributions(data, data_ref="raw"):
         axes[i].set_xlabel(col)
         axes[i].grid(True)
 
-    fig.suptitle('Boxplots of Measurements in {} data'.format(data_ref), fontsize=20, y=1.0001)
+    fig.suptitle("Box Plots of Measurements in {} data".format(data_ref), fontsize=20, y=1.0001)
     plt.tight_layout()
     plt.savefig("../visualisations/distributions/{}.png".format(data_ref))
