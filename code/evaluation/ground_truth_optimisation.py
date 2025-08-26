@@ -187,7 +187,7 @@ def extract_nmae_values(data, individual=True, imputation_types=None):
 
 def deep_learning_scores(dl_type, m_type, m_percent, average=True):
     """
-    If the gain scores exist from the notebook then this will extract the relevant nmae scores. Either average for the
+    If the WGAIN or MIWAE scores exist from the notebook then this will extract the relevant nmae scores. Either average for the
      given reference (missing type and percentage) or the nmae for all the MEASUREMENTS.
     :param dl_type: String representing which DL imputer is being referred to. i.e. wgain or miwae
     :param m_type: String representing the missing type, i.e. MCAR.
@@ -200,7 +200,7 @@ def deep_learning_scores(dl_type, m_type, m_percent, average=True):
     elif dl_type == "miwae":
         dl_scores = pd.read_csv("../../data/grid_searches/ground_truth/artificial_miwae_scores.csv")
     else:
-        raise ValueError("Invalid deep learning type for scores")
+        raise ValueError("Invalid deep learning type for scores, must be either wgain or miwae, not {}".format(dl_type))
 
     # Limiting findings to just those matching reference
     m_type_scores = dl_scores[(dl_scores["missing_type"] == m_type) & (dl_scores["missing_level"] == m_percent)]
@@ -229,11 +229,11 @@ def format_label(missing_type):
     return label
 
 
-def plot_individual_nmae(include_gain=False, include_miwae=True):
+def plot_individual_nmae(include_wgain=False, include_miwae=True):
     """
     Plot the individual nmae results for each of the MEASUREMENTS. A plot is created for each type of missing data and
     stored in the visualisations/ground_truth folder.
-    :param include_gain: Boolean to confirm whether the GAIN findings are available. If so they will be included.
+    :param include_wgain: Boolean to confirm whether the WGAIN findings are available. If so they will be included.
     :param include_miwae: Boolean to confirm whether the MIWAE findings are available. If so they will be included.
     """
     # Individual plots for each of the missing types.
@@ -256,10 +256,10 @@ def plot_individual_nmae(include_gain=False, include_miwae=True):
             ax.bar((x - 1 * width), nmae_results["knn"], width=width, label="k-NN")
             ax.bar((x + 0 * width), nmae_results["mice"], width=width, label="MICE")
 
-            if include_gain:
-                m_type_gain_nmae = deep_learning_scores("gain", m_type, missing_percentage, average=False)
-                nmae_results["gain"] = m_type_gain_nmae.flatten()
-                ax.bar((x + 1 * width), nmae_results["gain"], width=width, label="GAIN")
+            if include_wgain:
+                m_type_wgain_nmae = deep_learning_scores("wgain", m_type, missing_percentage, average=False)
+                nmae_results["wgain"] = m_type_wgain_nmae.flatten()
+                ax.bar((x + 1 * width), nmae_results["wgain"], width=width, label="WGAIN")
             if include_miwae:
                 m_type_miwae_nmae = deep_learning_scores("miwae", m_type, missing_percentage, average=False)
                 nmae_results["miwae"] = m_type_miwae_nmae.flatten()
@@ -285,19 +285,19 @@ def plot_individual_nmae(include_gain=False, include_miwae=True):
         plt.savefig("../../visualisations/ground_truth/{}_feature_mae.png".format(m_type))
 
 
-def plot_average_nmae(include_gain=False, include_miwae=True):
+def plot_average_nmae(include_wgain=False, include_miwae=True):
     """
     Plot the average nmae results for each type of missing data, with the plot stored in the
     visualisations/ground_truth folder.
-    :param include_gain: Boolean to confirm whether the GAIN findings are available. If so they will be included.
+    :param include_wgain: Boolean to confirm whether the WGAIN findings are available. If so they will be included.
     :param include_miwae: Boolean to confirm whether the MIWAE findings are available. If so they will be included.
     """
     for missing_percentage in ARTIFICIAL_MISSING_PERCENTAGES:
         nmae_data = {"mean": [], "knn": [], "mice": []}
 
         # Updating dictionary to include optional imputation results
-        if include_gain:
-            nmae_data["gain"] = []
+        if include_wgain:
+            nmae_data["wgain"] = []
         if include_miwae:
             nmae_data["miwae"] = []
 
@@ -310,10 +310,10 @@ def plot_average_nmae(include_gain=False, include_miwae=True):
             nmae_data["knn"].append(nmae_results["knn"])
             nmae_data["mice"].append(nmae_results["mice"])
 
-            # Gain results structured differently so extracted differently
-            if include_gain:
-                m_type_gain_nmae = deep_learning_scores("gain", m_type, missing_percentage, average=True)
-                nmae_data["gain"].append(m_type_gain_nmae)
+            # WGAIN/MIWAE results structured differently so extracted differently
+            if include_wgain:
+                m_type_wgain_nmae = deep_learning_scores("wgain", m_type, missing_percentage, average=True)
+                nmae_data["wgain"].append(m_type_wgain_nmae)
             if include_miwae:
                 m_type_miwae_nmae = deep_learning_scores("miwae", m_type, missing_percentage, average=True)
                 nmae_data["miwae"].append(m_type_miwae_nmae)
@@ -328,8 +328,8 @@ def plot_average_nmae(include_gain=False, include_miwae=True):
         ax.bar((x - 1 * width), nmae_data["knn"], width=width, label="k-NN")
         ax.bar((x + 0 * width), nmae_data["mice"], width=width, label="MICE")
 
-        if include_gain:
-            ax.bar((x + 1 * width), nmae_data["gain"], width=width, label="GAIN")
+        if include_wgain:
+            ax.bar((x + 1 * width), nmae_data["wgain"], width=width, label="WGAIN")
         if include_miwae:
             ax.bar((x + 2 * width), nmae_data["miwae"], width=width, label="MIWAE")
 
@@ -348,17 +348,17 @@ def plot_average_nmae(include_gain=False, include_miwae=True):
         plt.savefig("../../visualisations/ground_truth/average_nmae_{}.png".format(missing_percentage))
 
 
-def plot_nmae_with_missing_rates(include_gain=True, include_miwae=True, separate_plots=True):
+def plot_nmae_with_missing_rates(include_wgain=True, include_miwae=True, separate_plots=True):
     """
     Plot the NMAE for each of the missing types in a 2 by 2 subplot, showing the NMAE per missing level for each of the
     imputers.
-    :param include_gain: Boolean to confirm whether the GAIN findings are available. If so they will be included.
+    :param include_wgain: Boolean to confirm whether the WGAIN findings are available. If so they will be included.
     :param include_miwae: Boolean to confirm whether the MIWAE findings are available. If so they will be included.
     :param separate_plots:
     """
     # Dictionary to contain the findings for all the missing types for each imputation type
     nmae_data = {method: {m_type: [] for m_type in MISSING_TYPES} for method in
-                 ["mean", "knn", "mice", "gain", "miwae"]}
+                 ["mean", "knn", "mice", "wgain", "miwae"]}
 
     # Getting the required nmae data
     for missing_percentage in ARTIFICIAL_MISSING_PERCENTAGES:
@@ -377,9 +377,9 @@ def plot_nmae_with_missing_rates(include_gain=True, include_miwae=True, separate
             nmae_data["mice"][m_type].append(nmae_results["mice"])
 
             # Get the average nmae for the DL imputations from their separate results file
-            if include_gain:
-                m_type_gain_nmae = deep_learning_scores("gain", m_type, missing_percentage, average=True)
-                nmae_data["gain"][m_type].append(m_type_gain_nmae)
+            if include_wgain:
+                m_type_wgain_nmae = deep_learning_scores("wgain", m_type, missing_percentage, average=True)
+                nmae_data["wgain"][m_type].append(m_type_wgain_nmae)
             if include_miwae:
                 m_type_miwae = deep_learning_scores("miwae", m_type, missing_percentage, average=True)
                 nmae_data["miwae"][m_type].append(m_type_miwae)
@@ -396,8 +396,8 @@ def plot_nmae_with_missing_rates(include_gain=True, include_miwae=True, separate
         ax.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["knn"][m_type], marker="x", label="k-NN", linestyle="-")
         ax.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["mice"][m_type], marker="x", label="MICE", linestyle="-")
 
-        if include_gain:
-            ax.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["gain"][m_type], marker="x", label="GAIN", linestyle="-")
+        if include_wgain:
+            ax.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["wgain"][m_type], marker="x", label="WGAIN", linestyle="-")
         if include_miwae:
             ax.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["miwae"][m_type], marker="x", label="MIWAE",
                     linestyle="-")
@@ -427,8 +427,8 @@ def plot_nmae_with_missing_rates(include_gain=True, include_miwae=True, separate
             plt.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["knn"][m_type], marker="x", label="k-NN", linestyle="-")
             plt.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["mice"][m_type], marker="x", label="MICE", linestyle="-")
 
-            if include_gain:
-                plt.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["gain"][m_type], marker="x", label="GAIN",
+            if include_wgain:
+                plt.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["wgain"][m_type], marker="x", label="WGAIN",
                          linestyle="-")
             if include_miwae:
                 plt.plot(ARTIFICIAL_MISSING_PERCENTAGES, nmae_data["miwae"][m_type], marker="x", label="MIWAE",
@@ -452,8 +452,8 @@ def plot_nmae_with_missing_rates(include_gain=True, include_miwae=True, separate
 # grid_search_artificially_missing()
 
 # Visualisation for the individual feature nMAES.
-plot_individual_nmae(include_gain=True, include_miwae=True)
+plot_individual_nmae(include_wgain=True, include_miwae=True)
 # Visualisation for the average nMAE as the combination of missing level and type changes.
-plot_average_nmae(include_gain=True, include_miwae=True)
+plot_average_nmae(include_wgain=True, include_miwae=True)
 # Visualisation for how the nMAE changes with different levels of missingness
-plot_nmae_with_missing_rates(include_gain=True, include_miwae=True)
+plot_nmae_with_missing_rates(include_wgain=True, include_miwae=True)

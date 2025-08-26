@@ -37,14 +37,17 @@ def data_setup(score_data):
     return X_train, X_test, y_train, y_test
 
 
-def cross_validate_xgb(score_data, model_name=None, output_stats=False, show_feature_importance=False,
-                       show_roc_auc=False, gamma=0.01, learning_rate=0.001, max_depth=3, n_estimators=100, n_splits=5):
+def cross_validate_xgb(score_data, model_name=None, output_stats=False, show_roc_auc=False,
+                       show_feature_importance=False, save_feature_weightings=False, gamma=0.01, learning_rate=0.001,
+                       max_depth=3, n_estimators=100, n_splits=5):
     """
     Perform cross-validation for XGBClassifier outside of grid search.
     :param score_data: Full dataset to perform cross-validation on
     :param output_stats: Boolean - Decide whether to print metrics of the model including F-1 and confusion matrix
     :param show_feature_importance: Boolean specifying whether to plot the feature importance plot for the final model.
     :param show_roc_auc: Boolean specifying whether to plot the ROC-AUC curve for the final model.
+    :param save_feature_weightings: Boolean specifying whether to save the feature importance's for the final model as
+    a csv file.
     :param model_name: Reference for the model when plotting or outputting results
     :param gamma: Minimum loss reduction required to make a further partition on a leaf node of the tree
     :param learning_rate: Step size of optimisation
@@ -96,7 +99,7 @@ def cross_validate_xgb(score_data, model_name=None, output_stats=False, show_fea
 
     # Using feature importance of the last model
     if show_feature_importance:
-        xgb_feature_importance(model, model_name)
+        xgb_feature_importance(model, model_name, save_feature_weightings=save_feature_weightings)
     if show_roc_auc:
         plot_roc(model, X_test, y_test, model_name)
 
@@ -157,28 +160,35 @@ def plot_roc(model, X_test, y_test, model_name):
     plt.close()
 
 
-def xgb_feature_importance(model, model_name):
+def xgb_feature_importance(model, model_name, plot_feature_weightings=True, save_feature_weightings=False):
     """
     Given an XGB model plot the feature importance
     :param model_name: Label used to title and save the plot
     :param model: The trained XGBoost model
+    :param plot_feature_weightings: If true, plot feature importance weightings
+    :param save_feature_weightings: If true, save feature importance weightings as csv.
     """
     feature_importance = model.feature_importances_
 
-    # Plotting feature importance
-    plt.figure()
-    bars = plt.barh(range(len(MEASUREMENTS)), feature_importance)
-    plt.yticks(range(len(MEASUREMENTS)), MEASUREMENTS)
-    plt.xlabel("Feature Importance Score")
-    plt.ylabel("Features")
-    plt.title("Feature Importance for {}".format(model_name))
+    if plot_feature_weightings:
+        # Plotting feature importance
+        plt.figure()
+        bars = plt.barh(range(len(MEASUREMENTS)), feature_importance)
+        plt.yticks(range(len(MEASUREMENTS)), MEASUREMENTS)
+        plt.xlabel("Feature Importance Score")
+        plt.ylabel("Features")
+        plt.title("Feature Importance for {}".format(model_name))
 
-    for i, (bar, score) in enumerate(zip(bars, feature_importance)):
-        plt.text(score + 0.01, i, f"{score:.3f}", va="center", fontsize=8)
+        for i, (bar, score) in enumerate(zip(bars, feature_importance)):
+            plt.text(score + 0.01, i, "{:.3f}".format(score), va="center", fontsize=8)
 
-    plt.tight_layout()
-    plt.savefig("../../visualisations/gs/{}_feature_importance.png".format(model_name))
-    plt.close()
+        plt.tight_layout()
+        plt.savefig("../../visualisations/gs/{}_feature_importance.png".format(model_name))
+        plt.close()
+
+    if save_feature_weightings:
+        feature_importance_df = pd.DataFrame({"Feature": MEASUREMENTS, "Importance": feature_importance})
+        feature_importance_df.to_csv("../../data/predictions/{}_feature_importance.csv".format(model_name))
 
 
 def xgb_grid_search_optimisation(score_data, search_reference="no missing data", save_results=True):

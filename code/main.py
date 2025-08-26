@@ -97,11 +97,11 @@ def impute_measurements(types=None, exclude=None):
 
 
 # Preprocesses the stays and links them to their patient records (no measurements or further features)
-# prepare_data(view_statistics=True)
+prepare_data(view_statistics=True)
 
 # Links patients to their measurement data - this is very long and memory intensive, default chunk size is 2000000, if
 # to large it can be modified in the constants file.
-# perform_feature_selection()
+perform_feature_selection()
 
 # This creates the different versions of the datasets which are actually being imputed. It will limit the records for
 # each patient to be missing either 0, 2, 5, 10 or 12 values per record.

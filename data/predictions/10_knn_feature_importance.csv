@@ -1,0 +1,15 @@
+,Feature,Importance
+0,mean arterial pressure,0.02904992
+1,heart rate,0.08527611
+2,respiratory rate,0.06087604
+3,PCO2 (Arterial),0.03876591
+4,PO2 (Arterial),0.048427206
+5,FiO2,0.09582305
+6,arterial pH,0.08966933
+7,sodium,0.10085679
+8,potassium,0.026280465
+9,creatinine,0.15646067
+10,hematocrit,0.025350051
+11,white blood cell,0.06967039
+12,HCO3 (serum),0.084077656
+13,anchor_age,0.08941647

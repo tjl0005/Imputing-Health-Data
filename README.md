@@ -15,7 +15,7 @@ The findings of the evaluations are presented as visualisations.
 ## The Data
 
 The dataset is referred to as MIMIC-IV, which is available from:  
-https://physionet.org/content/mimiciv/1.0/ (Halevy et al., 2009; Henry et al., 2016; Johnson et al., 2016)
+**https://physionet.org/content/mimiciv/1.0/** (Halevy et al., 2009; Henry et al., 2016; Johnson et al., 2016)
 
 This data is required for the code to run, specifically the admissions and patients data from the "HOSP" module and
 chart events, item directory and icu stays from the "ICU" module.
@@ -77,36 +77,55 @@ of use. Although it is not used in the final version either due to time constrai
 
 ## Notebooks
 
-These are written for the GAIN (Dong et al., 2018) and MIWAE (Mattei et al., 2018) deep learning implementations,
+These are written for the WGAIN (Arjovsky et al., 2017; Friedjungová et al., 2020) and MIWAE (Mattei et al., 2018) deep
+learning implementations,
 specifically to work with the data produced
 here. They contain the full code for setting up the models, evaluation through ground truth and downstream performance.
 The data from them is also included in this repository and used when visualising results by default.
 
-## Results
+## Summary of Conclusions
+Selecting an appropriate imputation method is difficult but a necessity in complex datasets where missingness is
+unavoidable. The selection depends on the extent of missingness, intended use of the data and the resources available.
+We found that while simpler techniques can yield strong performance, they are not comprehensive and fail to capture the
+increased variance of EHR datasets under complex conditions. In some cases, this limitation can be an advantage, but it
+reinforces the need for a clear understanding of the intended downstream, as the modelling process will change the
+requirements of imputation.
 
-Not yet final
+In this study we confirmed that although the MCAR mechanism contributes to missingness in EHR datasets, it is part of a
+larger mechanism, breaking the assumption of previous studies. A distinct relationship between PCO2 and PO2
+suggests these variables are MNAR, likely due to the context in which they are tested. MCAR is expected in cases of
+machine and human error (Polderman et al., 2001), while MAR may explain missingness in variables like the GCS aspects,
+potentially due to their difficulty of assessment.
+
+These findings highlight the challenge of imputing EHR data, where each variable has different levels of missingness and
+is influenced by a combination of missing mechanisms. Our ground truth analysis further revealed that imputation
+accuracy can be more dependent on the features themselves, regardless of the missing mechanism and imputation strategy.
+These challenges complicate the growing potential of ML with EHR datasets (Almedia et al., 2024), where effective
+imputation is a key area of research (Batra et al., 2022; Syed et al., 2021).
 
 # References
 
-Dong, W., Fong, D. Y. T., Yoon, J., Wan, E. Y. F., Bedford, L. E., Tang, E. H. M., & Lo Kuen Lam, C. (2021). Generative
-adversarial networks for imputing missing data for big data clinical research. BMC Medical Research Methodology, 21(
-1). https://doi.org/10.1186/s12874-021-01272-3
+Arjovsky, M., Chintala, S., & Bottou, L. (2017, July 17). Wasserstein Generative Adversarial Networks.
+PMLR. https://proceedings.mlr.press/v70/arjovsky17a.html
+Friedjungová, M., Vašata, D., Balatsko, M., & Jiřina, M. (2020b). Missing Features Reconstruction Using a Wasserstein
+Generative Adversarial Imputation Network. In Lecture notes in computer science (pp.
+225–239). https://doi.org/10.1007/978-3-030-50423-6_17
 Henry, J., Pylypchuk, Y., Searcy T. & Patel V. (May 2016). Adoption of Electronic Health Record Systems among U.S.
 Non-Federal Acute Care Hospitals: 2008-2015. ONC Data Brief, no.35. Office of the National Coordinator for Health
-Information Technology: Washington DC.+
+Information Technology: Washington DC.+  
 Halevy, A., Norvig, P., & Pereira, F. (2009). The unreasonable effectiveness of data. IEEE Intelligent Systems, 24(2),
-8-12.
+8-12.  
 Johnson, A. E., Pollard, T. J., Shen, L., Lehman, L.H., Feng, M., Ghassemi, M., ... & Mark, R. G. (2016). MIMIC-III, a
-freely accessible critical care database. Scientific data, 3(1), 1-9.
+freely accessible critical care database. Scientific data, 3(1), 1-9.  
 Kazijevs, M., & Samad, M. D. (2023). Deep imputation of missing values in time series health data: A review with
-benchmarking. Journal of Biomedical Informatics, 144, 104440. https://doi.org/10.1016/j.jbi.2023.104440
+benchmarking. Journal of Biomedical Informatics, 144, 104440. https://doi.org/10.1016/j.jbi.2023.104440  
 Knaus, W. A., Draper, E. A., Wagner, D. P., & Zimmerman, J. E. (1985). APACHE II: a severity of disease classification
-system. Critical care medicine, 13(10), 818–829.
+system. Critical care medicine, 13(10), 818–829.  
 Knaus, W. A., Wagner, D. P., Draper, E. A., Zimmerman, J. E., Bergner, M., Bastos, P. G., Sirio, C. A., Murphy, D. J.,
 Lotring, T., Damiano, A., & Harrell, F. E. (1991). The APACHE III Prognostic System. CHEST Journal, 100(6),
-1619–1636. https://doi.org/10.1378/chest.100.6.1619
+1619–1636. https://doi.org/10.1378/chest.100.6.1619  
 Mattei, P., & Frellsen, J. (2018). MIWAE: Deep Generative Modelling and Imputation of Incomplete Data. arXiv (Cornell
-University). https://doi.org/10.48550/arxiv.1812.02633
+University). https://doi.org/10.48550/arxiv.1812.02633  
 Steif, J., Brant, R., Sreepada, R. S., West, N., Murthy, S., & Görges, M. (2021). Prediction model performance with
 different imputation strategies: A simulation study using a North American ICU registry. Pediatric Critical Care
 Medicine, 23(1), e29–e44. https://doi.org/10.1097/pcc.0000000000002835 
